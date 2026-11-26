@@ -1,0 +1,319 @@
+{
+  "block": "PB_Intlk",
+  "spec": "spec/blocks/PB_Intlk_基本版.md v0.3・拡張_PB_Intlk_バイパス.md v0.2",
+  "note": "期待値は仕様書から手で起こした（NF-4）。時間は 0.25 s の倍数。Cause・Raw・Mem・First は bit0＝原因 1 のワードの値。Delay は原因 1〜8 の配列。diag の名前：dtClamp・cfgErr・pending（遅延中の原因がある）。alm の名前：byp（バイパス中）。IL-18〜 はバイパス（BypAllow・BypMaxT を書かない設定は 0：バイパスなし、基本版と同じ動き）",
+  "tolerance": { "abs": 0.0001 },
+  "configs": {
+    "default": { "ResetMode": 0, "ResetBy": 1, "FoEn": true, "Delay": [0, 0, 0, 0, 0, 0, 0, 0] },
+    "delay2": { "ResetMode": 0, "ResetBy": 1, "FoEn": true, "Delay": [0, 1, 0, 0, 0, 0, 0, 0] },
+    "byp1": { "ResetMode": 0, "ResetBy": 1, "FoEn": true, "Delay": [0, 0, 0, 0, 0, 0, 0, 0], "BypAllow": 1, "BypMaxT": 60 },
+    "byp3": { "ResetMode": 0, "ResetBy": 1, "FoEn": true, "Delay": [0, 0, 0, 0, 0, 0, 0, 0], "BypAllow": 3, "BypMaxT": 60 },
+    "delay1": { "ResetMode": 0, "ResetBy": 1, "FoEn": true, "Delay": [1, 0, 0, 0, 0, 0, 0, 0] }
+  },
+  "cases": [
+    {
+      "id": "IL-01", "title": "手動リセット：トリップ・ラッチ・リセット可・リセット。同じ番号の要求は何もしない", "req": ["4 章", "5 章", "9 章", "14-2"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 1000 }, "expect": { "Trip": false, "Cause": 0, "Raw": 0, "Mem": 0, "First": 0, "FirstNo": 0, "FirstTime": 0, "ResetReady": false, "STS": 1, "MODE": 0, "ALM": 0, "DIAG": 0 } },
+        { "in": { "In1": true, "Now": 1001 }, "expect": { "Trip": true, "Cause": 1, "Raw": 1, "Mem": 1, "First": 1, "FirstNo": 1, "FirstTime": 1001, "ResetReady": false, "ALM": 0 } },
+        { "in": { "In1": false, "Now": 1002 }, "expect": { "Trip": true, "Cause": 0, "Raw": 0, "Mem": 1, "First": 1, "FirstNo": 1, "FirstTime": 1001, "ResetReady": true } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "AckSeq": 1, "Result": 0, "Trip": false, "Mem": 0, "First": 0, "FirstNo": 0, "FirstTime": 0, "ResetReady": false } },
+        { "in": { "In1": true, "Now": 1010 }, "expect": { "AckSeq": 1, "Result": 0, "Trip": true, "First": 1, "FirstTime": 1010 } },
+        { "in": { "ReqSeq": 2 }, "expect": { "AckSeq": 2, "Result": 11, "Trip": true, "ResetReady": false } },
+        { "in": { "In1": false }, "expect": { "AckSeq": 2, "Result": 11, "Trip": true, "ResetReady": true } },
+        { "in": { "ReqSeq": 3 }, "expect": { "AckSeq": 3, "Result": 0, "Trip": false } },
+        { "in": { "ReqSeq": 4 }, "expect": { "AckSeq": 4, "Result": 10, "Trip": false } }
+      ]
+    },
+    {
+      "id": "IL-02", "title": "トリップ中に別の原因が入っても First・FirstTime は変えず、Mem に足す", "req": ["4 章", "14-4"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 50 }, "expect": { "Trip": false } },
+        { "in": { "In3": true }, "expect": { "Trip": true, "Cause": 4, "Mem": 4, "First": 4, "FirstNo": 3, "FirstTime": 50 } },
+        { "in": { "In5": true, "Now": 51 }, "expect": { "Trip": true, "Cause": 20, "Raw": 20, "Mem": 20, "First": 4, "FirstNo": 3, "FirstTime": 50 } },
+        { "in": { "In3": false }, "expect": { "Cause": 16, "Mem": 20, "First": 4, "ResetReady": false } },
+        { "in": { "In5": false }, "expect": { "Cause": 0, "Mem": 20, "First": 4, "FirstNo": 3, "ResetReady": true, "Trip": true } }
+      ]
+    },
+    {
+      "id": "IL-03", "title": "同じスキャンで 2 つ入ったら両方ファーストアウト。FirstNo は小さい方", "req": ["4 章"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 7 }, "expect": { "Trip": false } },
+        { "in": { "In6": true, "In2": true, "Now": 8 }, "expect": { "Trip": true, "Cause": 34, "First": 34, "FirstNo": 2, "Mem": 34, "FirstTime": 8 } },
+        { "in": { "In8": true }, "expect": { "Cause": 162, "First": 34, "Mem": 162 } }
+      ]
+    },
+    {
+      "id": "IL-04", "title": "要求の口の断る順番（項目 1 → 書ける人 2 → 値 8 → 10 → 11）。ResetBy 1 は運転員・エンジニアが書ける", "req": ["5 章", "9 章"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 0 }, "expect": { "Trip": false } },
+        { "in": { "In4": true }, "expect": { "Trip": true, "First": 8, "FirstNo": 4 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 4, "ReqValue": 1, "ReqWriter": 3 }, "expect": { "AckSeq": 1, "Result": 1 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 3 }, "expect": { "AckSeq": 2, "Result": 2, "Trip": true } },
+        { "in": { "ReqSeq": 3, "ReqWriter": 1, "ReqValue": 0 }, "expect": { "AckSeq": 3, "Result": 8 } },
+        { "in": { "ReqSeq": 4, "ReqValue": "NaN" }, "expect": { "AckSeq": 4, "Result": 8 } },
+        { "in": { "ReqSeq": 5, "ReqValue": 1 }, "expect": { "AckSeq": 5, "Result": 11, "Trip": true } },
+        { "in": { "In4": false, "ReqSeq": 6, "ReqWriter": 2 }, "expect": { "AckSeq": 6, "Result": 0, "Trip": false, "First": 0, "ResetReady": false } }
+      ]
+    },
+    {
+      "id": "IL-05", "title": "ResetBy 2 は運転員のリセットを断り、エンジニアは受け付ける", "req": ["5 章", "13 章 論点 7"],
+      "config": "default", "cfg": { "ResetBy": 2 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In1": true }, "expect": { "Trip": true } },
+        { "in": { "In1": false }, "expect": { "ResetReady": true } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "AckSeq": 1, "Result": 2, "Trip": true, "ResetReady": true } },
+        { "in": { "ReqSeq": 2, "ReqWriter": 2 }, "expect": { "AckSeq": 2, "Result": 0, "Trip": false } }
+      ]
+    },
+    {
+      "id": "IL-06", "title": "自動リセット：原因が戻ったスキャンで外れる。ResetReady は出ない。要求の結果は手動と同じ", "req": ["5 章", "14-5", "14-6"],
+      "config": "default", "cfg": { "ResetMode": 1 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 300 }, "expect": { "Trip": false } },
+        { "in": { "In1": true }, "expect": { "Trip": true, "First": 1, "Mem": 1, "FirstTime": 300, "ResetReady": false } },
+        { "in": { "In1": false }, "expect": { "Trip": false, "First": 0, "FirstNo": 0, "Mem": 0, "FirstTime": 0, "ResetReady": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "AckSeq": 1, "Result": 10 } },
+        { "in": { "In1": true }, "expect": { "Trip": true } },
+        { "in": { "ReqSeq": 2 }, "expect": { "AckSeq": 2, "Result": 11, "Trip": true } },
+        { "in": { "In1": false, "ReqSeq": 3 }, "expect": { "AckSeq": 3, "Result": 0, "Trip": false } }
+      ]
+    },
+    {
+      "id": "IL-07", "title": "原因ごとの ON 遅延 1 s。途中で戻ったら数え直す。遅延中は DIAG pending。トリップ前のリセットは 10（原因の入力があっても）", "req": ["3 章", "14-3"],
+      "config": "delay2",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "Trip": false, "diag": [] } },
+        { "in": { "In2": true }, "expect": { "Trip": false, "Cause": 0, "Raw": 2, "diag": ["pending"], "DIAG": 4 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "AckSeq": 1, "Result": 10, "Trip": false, "Cause": 0, "diag": ["pending"] } },
+        { "in": { "In2": false }, "expect": { "Trip": false, "Cause": 0, "Raw": 0, "diag": [] } },
+        { "in": { "In2": true }, "expect": { "Trip": false, "diag": ["pending"] } },
+        { "expect": { "Trip": false, "diag": ["pending"] } },
+        { "expect": { "Trip": false, "diag": ["pending"] } },
+        { "expect": { "Trip": true, "Cause": 2, "First": 2, "FirstNo": 2, "diag": [] } }
+      ]
+    },
+    {
+      "id": "IL-08", "title": "遅延中の原因があるとリセットできない。遅延の後に入ったら Mem に足し、First は変えない", "req": ["5 章", "14-4"],
+      "config": "delay2",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "Trip": false } },
+        { "in": { "In1": true }, "expect": { "Trip": true, "First": 1, "Mem": 1 } },
+        { "in": { "In1": false, "In2": true }, "expect": { "Trip": true, "Cause": 0, "Raw": 2, "Mem": 1, "ResetReady": false, "diag": ["pending"] } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "AckSeq": 1, "Result": 11, "Trip": true, "Mem": 1 } },
+        { "expect": { "Cause": 0, "Mem": 1 } },
+        { "expect": { "Cause": 2, "Mem": 3, "First": 1, "FirstNo": 1, "diag": [] } }
+      ]
+    },
+    {
+      "id": "IL-09", "title": "dt 0 では遅延は進まないが、遅延 0 の原因はトリップする。dt 2 s は 1 s に打ち切り（遅延 1.5 s はまだ）", "req": ["3 章", "7 章"],
+      "config": "delay1", "cfg": { "Delay": [1.5, 0, 0, 0, 0, 0, 0, 0] },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 5 }, "expect": { "Trip": false } },
+        { "in": { "dt": 0, "In1": true, "In3": true }, "expect": { "Trip": true, "Cause": 4, "Raw": 5, "First": 4, "FirstNo": 3, "Mem": 4, "diag": ["pending"] } },
+        { "expect": { "Cause": 4, "diag": ["pending"] } },
+        { "in": { "dt": 2 }, "expect": { "Cause": 4, "diag": ["dtClamp", "pending"], "dtClamp": true, "STS": 257, "DIAG": 5 } },
+        { "in": { "dt": 0.25 }, "expect": { "Cause": 4, "STS": 1, "diag": ["pending"] } },
+        { "expect": { "Cause": 5, "Mem": 5, "First": 4, "diag": [] } }
+      ]
+    },
+    {
+      "id": "IL-10", "title": "Init：入っている原因は遅延なしでトリップ。要求は処理しない。ラッチは Init で外れる", "req": ["7 章", "14-8", "13 章 論点 4"],
+      "config": "delay1",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In1": true, "Now": 77, "ReqSeq": 5, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Trip": true, "Cause": 1, "First": 1, "FirstNo": 1, "FirstTime": 77, "Mem": 1, "diag": [], "AckSeq": 5, "Result": 0 } },
+        { "in": { "In1": false, "Now": 78 }, "expect": { "Trip": true, "ResetReady": true, "AckSeq": 5 } },
+        { "in": { "Init": true }, "expect": { "Trip": false, "Mem": 0, "First": 0, "FirstTime": 0, "ResetReady": false } },
+        { "in": { "In1": true }, "expect": { "Trip": false, "Cause": 0, "diag": ["pending"] } },
+        { "in": { "Init": true, "Now": 90 }, "expect": { "Trip": true, "Cause": 1, "First": 1, "FirstTime": 90, "diag": [] } }
+      ]
+    },
+    {
+      "id": "IL-11", "title": "FoEn FALSE：ファーストアウトは 0 のまま、Mem は記録する", "req": ["4 章", "14-4"],
+      "config": "default", "cfg": { "FoEn": false },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 12 }, "expect": { "Trip": false } },
+        { "in": { "In7": true }, "expect": { "Trip": true, "Cause": 64, "Mem": 64, "First": 0, "FirstNo": 0, "FirstTime": 0 } }
+      ]
+    },
+    {
+      "id": "IL-12", "title": "設定異常（運転中に Delay が負）：トリップ側。リセットは 11。戻ったら Init と同じ", "req": ["6 章", "14-7", "13 章 論点 5"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 400 }, "expect": { "Trip": false, "cfgErr": false } },
+        { "cfgSet": { "Delay": [-1, 0, 0, 0, 0, 0, 0, 0] }, "expect": { "Trip": true, "cfgErr": true, "STS": 129, "diag": ["cfgErr"], "DIAG": 2, "First": 0, "FirstNo": 0, "FirstTime": 0, "Mem": 0, "Cause": 0, "ResetReady": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "AckSeq": 1, "Result": 11, "Trip": true } },
+        { "in": { "ReqSeq": 2, "ReqWriter": 3 }, "expect": { "AckSeq": 2, "Result": 2 } },
+        { "in": { "ReqSeq": 3, "ReqWriter": 1, "ReqValue": 0 }, "expect": { "AckSeq": 3, "Result": 8 } },
+        { "in": { "In2": true, "Now": 401 }, "expect": { "Trip": true, "Raw": 2, "Cause": 2, "First": 0, "Mem": 0 } },
+        { "cfgSet": { "Delay": [0, 1, 0, 0, 0, 0, 0, 0] }, "in": { "Now": 402 }, "expect": { "Trip": true, "cfgErr": false, "STS": 1, "Cause": 2, "First": 2, "FirstNo": 2, "Mem": 2, "FirstTime": 402, "diag": [] } },
+        { "in": { "In2": false }, "expect": { "Trip": true, "ResetReady": true } }
+      ]
+    },
+    {
+      "id": "IL-13", "title": "設定異常になる値：ResetMode・ResetBy の範囲外、Delay の NaN・無限大。60 s を超える遅延は異常にしない", "req": ["6 章"],
+      "config": "default", "cfg": { "ResetMode": 2 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "Trip": true, "cfgErr": true } },
+        { "cfgSet": { "ResetMode": 0, "ResetBy": 3 }, "expect": { "Trip": true, "cfgErr": true } },
+        { "cfgSet": { "ResetBy": 2, "Delay": [0, 0, 0, 0, 0, "NaN", 0, 0] }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "Delay": [0, 0, 0, 0, 0, 0, 0, "Inf"] }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "Delay": [0, 0, 0, 0, 0, 0, 0, 100] }, "expect": { "cfgErr": false, "Trip": false, "STS": 1 } }
+      ]
+    },
+    {
+      "id": "IL-14", "title": "自動リセット：遅延の後に入った原因が残っている間は外さない。Mem に足す", "req": ["14-5"],
+      "config": "delay2", "cfg": { "ResetMode": 1 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.5 }, "expect": { "Trip": false } },
+        { "in": { "In1": true, "In2": true }, "expect": { "Trip": true, "Cause": 1, "First": 1, "diag": ["pending"] } },
+        { "in": { "In1": false }, "expect": { "Trip": true, "Cause": 2, "Mem": 3, "First": 1, "diag": [] } },
+        { "in": { "In2": false }, "expect": { "Trip": false, "Mem": 0, "First": 0 } }
+      ]
+    },
+    {
+      "id": "IL-15", "title": "自動リセット：原因 1 が戻った時点で原因 2 が遅延中なら外さない", "req": ["14-5"],
+      "config": "delay2", "cfg": { "ResetMode": 1 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "Trip": false } },
+        { "in": { "In1": true }, "expect": { "Trip": true } },
+        { "in": { "In2": true, "In1": false }, "expect": { "Trip": true, "Cause": 0, "Raw": 2, "diag": ["pending"] } },
+        { "in": { "In2": false }, "expect": { "Trip": false, "Raw": 0, "diag": [] } }
+      ]
+    },
+    {
+      "id": "IL-16", "title": "トリップしていないときに設定異常になったスキャンのリセット要求は 11（10 より先）", "req": ["14-7", "13 章 論点 5"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Trip": false } },
+        { "cfgSet": { "Delay": [-1, 0, 0, 0, 0, 0, 0, 0] }, "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 11, "Trip": true, "cfgErr": true } }
+      ]
+    },
+    {
+      "id": "IL-17", "title": "遅延を経て原因になったら、入力が続く限り原因のまま（数え直さない）", "req": ["3 章", "14-3"],
+      "config": "delay1",
+      "steps": [
+        { "in": { "Init": true, "In1": false, "dt": 0.25 }, "expect": { "Cause": 0 } },
+        { "in": { "In1": true }, "expect": { "Cause": 0, "Trip": false, "diag": ["pending"] } },
+        { "expect": { "Cause": 0, "diag": ["pending"] } },
+        { "expect": { "Cause": 0, "diag": ["pending"] } },
+        { "expect": { "Cause": 1, "Trip": true, "diag": [] } },
+        { "expect": { "Cause": 1, "Trip": true, "diag": [] } },
+        { "expect": { "Cause": 1, "diag": [] } }
+      ]
+    },
+    {
+      "id": "IL-18", "title": "バイパス：バイパス中の原因ではトリップしない（Raw には出る）。外したスキャンでトリップ", "req": ["拡張 1 章", "拡張 2 章", "8-1", "8-9"],
+      "config": "byp1",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "Now": 0 }, "expect": { "Trip": false, "Byp": 0, "BypOn": false, "BypLeft": 0, "ALM": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "AckSeq": 1, "Result": 0, "Byp": 1, "BypOn": true, "BypLeft": 59.75, "alm": ["byp"], "ALM": 1 } },
+        { "in": { "In1": true, "Now": 5 }, "expect": { "Trip": false, "Raw": 1, "Cause": 0, "ResetReady": false, "BypLeft": 59.5, "alm": ["byp"] } },
+        { "in": { "ReqSeq": 2, "ReqItem": 3, "ReqValue": 1, "ReqWriter": 1, "Now": 6 }, "expect": { "Result": 0, "Byp": 0, "BypOn": false, "BypLeft": 0, "Trip": true, "Cause": 1, "First": 1, "FirstTime": 6, "ALM": 0 } }
+      ]
+    },
+    {
+      "id": "IL-19", "title": "バイパスの要求を断る：書ける人 2・値 8・BypAllow に無い 12・トリップ中 9。外すのは運転員も", "req": ["拡張 2 章", "8-7"],
+      "config": "byp1",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "Trip": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 2, "Byp": 0 } },
+        { "in": { "ReqSeq": 2, "ReqWriter": 2, "ReqValue": 0 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 3, "ReqValue": 256 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 4, "ReqValue": 1.5 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 5, "ReqValue": "NaN" }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 6, "ReqValue": 2 }, "expect": { "Result": 12, "Byp": 0 } },
+        { "in": { "ReqSeq": 7, "ReqValue": 3 }, "expect": { "Result": 12, "Byp": 0 } },
+        { "in": { "In2": true }, "expect": { "Trip": true } },
+        { "in": { "ReqSeq": 8, "ReqValue": 1 }, "expect": { "Result": 9, "Byp": 0 } },
+        { "in": { "ReqSeq": 9, "ReqItem": 3, "ReqWriter": 3 }, "expect": { "Result": 2 } },
+        { "in": { "ReqSeq": 10, "ReqWriter": 1, "ReqValue": "NaN" }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 11, "ReqValue": 1 }, "expect": { "Result": 0, "Byp": 0 } }
+      ]
+    },
+    {
+      "id": "IL-20", "title": "時間切れ：BypMaxT で自動的に外れ、原因が入っていればトリップ（dt 1 s で 60 スキャン）", "req": ["拡張 1 章", "6 章 論点 2", "8-1", "8-2"],
+      "config": "byp1",
+      "steps": [
+        { "in": { "Init": true, "dt": 1, "Now": 0 }, "expect": { "Trip": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "Byp": 1, "BypLeft": 59 } },
+        { "in": { "In1": true }, "expect": { "Trip": false, "BypLeft": 58 } },
+        { "repeat": 57, "in": {}, "expect": { "Trip": false, "Byp": 1, "BypLeft": 1 } },
+        { "in": { "Now": 61 }, "expect": { "Byp": 0, "BypOn": false, "BypLeft": 0, "Trip": true, "First": 1, "FirstTime": 61, "ALM": 0 } }
+      ]
+    },
+    {
+      "id": "IL-21", "title": "Init でバイパスを外す（Init では遅延なしでトリップ）", "req": ["拡張 1 章", "6 章 論点 4", "8-6"],
+      "config": "byp1",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "Trip": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Byp": 1 } },
+        { "in": { "In1": true }, "expect": { "Trip": false } },
+        { "in": { "Init": true }, "expect": { "Byp": 0, "BypOn": false, "Trip": true, "Cause": 1 } }
+      ]
+    },
+    {
+      "id": "IL-22", "title": "リセットの判定はバイパス中の原因を除いて見る（手動リセット）", "req": ["拡張 1 章", "8-8"],
+      "config": "byp1",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": {} },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Byp": 1 } },
+        { "in": { "In1": true, "In2": true }, "expect": { "Trip": true, "Raw": 3, "Cause": 2, "First": 2, "FirstNo": 2 } },
+        { "in": { "In2": false }, "expect": { "Raw": 1, "Cause": 0, "ResetReady": true } },
+        { "in": { "ReqSeq": 2, "ReqItem": 1 , "ReqWriter": 1 }, "expect": { "Result": 0, "Trip": false, "ResetReady": false } },
+        { "in": {}, "expect": { "Trip": false, "Byp": 1 } }
+      ]
+    },
+    {
+      "id": "IL-23", "title": "自動リセットもバイパス中の原因を除いて見る", "req": ["8-8"],
+      "config": "byp1", "cfg": { "ResetMode": 1 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": {} },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Byp": 1 } },
+        { "in": { "In1": true, "In2": true }, "expect": { "Trip": true } },
+        { "in": { "In2": false }, "expect": { "Trip": false, "Raw": 1 } }
+      ]
+    },
+    {
+      "id": "IL-24", "title": "BypAllow から外した原因はそのスキャンでバイパスを外す", "req": ["8-4"],
+      "config": "byp1",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": {} },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Byp": 1 } },
+        { "in": { "In1": true }, "expect": { "Trip": false } },
+        { "cfgSet": { "BypAllow": 0 }, "expect": { "Byp": 0, "Trip": true, "cfgErr": false } }
+      ]
+    },
+    {
+      "id": "IL-25", "title": "バイパスの設定異常：BypAllow ≠ 0 で BypMaxT が範囲外・数でない、BypAllow の bit8 以上。設定異常でバイパスを外す", "req": ["拡張 4 章", "8-5", "8-6"],
+      "config": "byp1",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "cfgErr": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Byp": 1 } },
+        { "cfgSet": { "BypMaxT": "NaN" }, "expect": { "cfgErr": true, "Byp": 0, "BypOn": false, "Trip": true } },
+        { "cfgSet": { "BypMaxT": 59 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "BypMaxT": 86401 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "BypMaxT": 60 }, "expect": { "cfgErr": false, "Trip": false, "Byp": 0 } },
+        { "cfgSet": { "BypAllow": 256 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "BypAllow": 0, "BypMaxT": 0 }, "expect": { "cfgErr": false } },
+        { "in": { "ReqSeq": 2 }, "expect": { "Result": 12 } }
+      ]
+    },
+    {
+      "id": "IL-26", "title": "もう一度バイパスすると時間を数え直す。BypLeft は一番短い残り時間", "req": ["8-2", "8-3"],
+      "config": "byp3",
+      "steps": [
+        { "in": { "Init": true, "dt": 1 }, "expect": {} },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Byp": 1, "BypLeft": 59 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 2 }, "expect": { "Byp": 3, "BypLeft": 58 } },
+        { "in": { "ReqSeq": 3, "ReqValue": 1 }, "expect": { "Byp": 3, "BypLeft": 58 } },
+        { "in": {}, "expect": { "BypLeft": 57 } },
+        { "in": { "ReqSeq": 4, "ReqItem": 3, "ReqValue": 2 }, "expect": { "Byp": 1, "BypLeft": 57 } }
+      ]
+    }
+  ]
+}

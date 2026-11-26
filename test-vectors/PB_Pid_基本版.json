@@ -1,0 +1,283 @@
+{
+  "block": "PB_Pid",
+  "spec": "spec/blocks/PB_Pid_基本版.md v0.5",
+  "note": "期待値は仕様書から手で起こした（NF-4）。レンジ 0〜100 なら偏差（%）= PV − SP（正動作）。PB 100 で K = 1。dt 0.25・TI 1 で積分は 1 スキャンに偏差 × 0.25。TD 2.5 で η·TD = 0.25。diag：dtClamp・cfgErr・pvBad・trk・casShed・mvHi・mvLo・erf（外部リセットで計算）。PI-21〜 は外部リセット：TI 1・dt 0.25 で一次遅れの係数は 0.2",
+  "tolerance": { "abs": 0.0001 },
+  "configs": {
+    "base": { "Action": 1, "Alg": 0, "EuLo": 0, "EuHi": 100, "PB": 100, "TI": 0, "TD": 0, "MvLo": 0, "MvHi": 100, "TrkEndMan": false, "SP": 50, "MV": 50, "Mode": 0 }
+  },
+  "cases": [
+    {
+      "id": "PI-01", "title": "基本形 PID の比例（正動作、TI 0）。SP を変えると偏差の変化として比例が効く", "req": ["2 章", "13 章 1"],
+      "config": "base",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MODE": 0, "MV": 50, "SP": 50, "STS": 1, "diag": [] } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 0, "MODE": 1, "MV": 50 } },
+        { "in": { "PV": 60 }, "expect": { "MV": 60 } },
+        { "expect": { "MV": 60 } },
+        { "in": { "PV": 40 }, "expect": { "MV": 40 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 30 }, "expect": { "Result": 0, "SP": 30, "MV": 60 } }
+      ]
+    },
+    {
+      "id": "PI-02", "title": "積分（TI 1 s）。MAN にすると計算を止めて MV を保持", "req": ["2 章", "3 章"],
+      "config": "base", "cfg": { "TI": 1 },
+      "steps": [
+        { "in": { "Init": true, "PV": 60, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MV": 52.5 } },
+        { "expect": { "MV": 55 } },
+        { "expect": { "MV": 57.5 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0 }, "expect": { "MODE": 0, "MV": 57.5 } },
+        { "expect": { "MV": 57.5 } }
+      ]
+    },
+    {
+      "id": "PI-03", "title": "I-PD：SP を変えても比例は効かず、積分だけが効く。PV の変化には比例が効く", "req": ["2 章"],
+      "config": "base", "cfg": { "Alg": 1, "TI": 1 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 40 }, "expect": { "MV": 52.5 } },
+        { "expect": { "MV": 55 } },
+        { "in": { "PV": 52 }, "expect": { "MV": 60 } }
+      ]
+    },
+    {
+      "id": "PI-04", "title": "PI-D：SP の変化に比例が効く", "req": ["2 章"],
+      "config": "base", "cfg": { "Alg": 2, "TI": 1 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 40 }, "expect": { "MV": 62.5 } },
+        { "expect": { "MV": 65 } }
+      ]
+    },
+    {
+      "id": "PI-17", "title": "PI-D の微分は PV にかかる：SP を変えても微分は効かず、PV の変化には効く", "req": ["2 章"],
+      "config": "base", "cfg": { "Alg": 2, "TD": 2.5 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 40 }, "expect": { "MV": 60 } },
+        { "in": { "PV": 51 }, "expect": { "MV": 66 } },
+        { "expect": { "MV": 63.5 } }
+      ]
+    },
+    {
+      "id": "PI-05", "title": "逆動作・PB 50 %（K = 2）", "req": ["2 章"],
+      "config": "base", "cfg": { "Action": 0, "PB": 50 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MV": 50 } },
+        { "in": { "PV": 60 }, "expect": { "MV": 30 } }
+      ]
+    },
+    {
+      "id": "PI-06", "title": "MV 上限で切る。速度形なので積分が溜まらず、PV が戻ると上限からすぐ下がる", "req": ["2 章", "5 章"],
+      "config": "base", "cfg": { "TI": 1, "MvHi": 60, "MV": 55 },
+      "steps": [
+        { "in": { "Init": true, "PV": 60, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 55 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MV": 57.5, "diag": [] } },
+        { "expect": { "MV": 60, "diag": ["mvHi"], "DIAG": 32 } },
+        { "expect": { "MV": 60, "diag": ["mvHi"] } },
+        { "expect": { "MV": 60 } },
+        { "in": { "PV": 40 }, "expect": { "MV": 37.5, "diag": [] } }
+      ]
+    },
+    {
+      "id": "PI-07", "title": "微分（基本形 PID は偏差に、不完全微分 η·TD = 0.25）", "req": ["2 章", "14-10"],
+      "config": "base", "cfg": { "TD": 2.5 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MV": 50 } },
+        { "in": { "PV": 51 }, "expect": { "MV": 56 } },
+        { "expect": { "MV": 53.5 } },
+        { "expect": { "MV": 52.25 } },
+        { "expect": { "MV": 51.625 } }
+      ]
+    },
+    {
+      "id": "PI-08", "title": "PV 異常で MAN に落ち MV 保持。異常の間は AUT 不可（7）。戻っても MAN のまま。MAN の MV は上下限内だけ", "req": ["3 章", "13 章 3", "14-2", "14-4"],
+      "config": "base",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MODE": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MODE": 1 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 3, "ReqValue": 30 }, "expect": { "Result": 4, "MV": 50 } },
+        { "in": { "PvBad": true }, "expect": { "MODE": 0, "MV": 50, "diag": ["pvBad"] } },
+        { "in": { "ReqSeq": 3, "ReqItem": 1, "ReqValue": 1 }, "expect": { "Result": 7, "MODE": 0 } },
+        { "in": { "PvBad": false }, "expect": { "MODE": 0, "diag": [] } },
+        { "in": { "ReqSeq": 4, "ReqItem": 3, "ReqValue": 30 }, "expect": { "Result": 0, "MV": 30 } },
+        { "in": { "ReqSeq": 5, "ReqValue": 101 }, "expect": { "Result": 5, "MV": 30 } },
+        { "in": { "ReqSeq": 6, "ReqItem": 1, "ReqValue": 1 }, "expect": { "Result": 0, "MODE": 1, "MV": 30 } },
+        { "in": { "PV": "NaN" }, "expect": { "MODE": 0, "MV": 30, "diag": ["pvBad"] } }
+      ]
+    },
+    {
+      "id": "PI-09", "title": "トラッキング：MV = TrkVal、モードは変えない。終わったら TrkVal から同じモードで続ける", "req": ["3 章", "13 章 5"],
+      "config": "base",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MODE": 1 } },
+        { "in": { "TrkOn": true, "TrkVal": 0 }, "expect": { "MV": 0, "MODE": 1, "diag": ["trk"], "DIAG": 8 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 3, "ReqValue": 20 }, "expect": { "Result": 4, "MV": 0 } },
+        { "in": { "PV": 60 }, "expect": { "MV": 0 } },
+        { "in": { "TrkOn": false }, "expect": { "MV": 0, "MODE": 1, "diag": ["mvLo"] } },
+        { "in": { "PV": 70 }, "expect": { "MV": 10, "diag": [] } }
+      ]
+    },
+    {
+      "id": "PI-10", "title": "トラッキングは上下限で切らない。TrkEndMan なら終わったら MAN、そこから上下限で切る。トラッキング中は MAN でも MV を書けない", "req": ["3 章", "5 章", "14-7"],
+      "config": "base", "cfg": { "MvHi": 60, "TrkEndMan": true },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MODE": 1 } },
+        { "in": { "TrkOn": true, "TrkVal": 80 }, "expect": { "MV": 80, "diag": ["trk"] } },
+        { "in": { "TrkOn": false }, "expect": { "MODE": 0, "MV": 60, "diag": ["mvHi"] } },
+        { "in": { "TrkOn": true, "TrkVal": 10 }, "expect": { "MV": 10, "MODE": 0 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 3, "ReqValue": 20 }, "expect": { "Result": 4, "MV": 10 } },
+        { "in": { "TrkVal": "NaN" }, "expect": { "MV": 10 } }
+      ]
+    },
+    {
+      "id": "PI-11", "title": "カスケードの下位：CasIn（%）を下位のレンジで SP に。上位が使えなくなったら AUT に落ちる。戻り信号", "req": ["4 章", "14-5", "14-6", "14-8"],
+      "config": "base", "cfg": { "EuLo": 100, "EuHi": 300, "SP": 200 },
+      "steps": [
+        { "in": { "Init": true, "PV": 200, "CasIn": 50, "CasGood": false, "dt": 0.25, "ReqSeq": 0 }, "expect": { "BkCas": false, "BkSp": 50, "MODE": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 2, "ReqWriter": 1 }, "expect": { "Result": 6, "MODE": 0 } },
+        { "in": { "CasGood": true, "ReqSeq": 2 }, "expect": { "Result": 0, "MODE": 2, "SP": 200, "BkCas": true, "BkSp": 50, "MV": 50 } },
+        { "in": { "CasIn": 60 }, "expect": { "SP": 220, "BkSp": 60, "MV": 40 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 2, "ReqValue": 250 }, "expect": { "Result": 4, "SP": 220 } },
+        { "in": { "CasIn": 150 }, "expect": { "SP": 300, "BkSp": 100, "MV": 0, "diag": ["mvLo"] } },
+        { "in": { "CasGood": false }, "expect": { "MODE": 1, "SP": 300, "BkCas": false, "diag": ["casShed", "mvLo"] } },
+        { "in": { "ReqSeq": 4, "ReqItem": 1, "ReqValue": 1 }, "expect": { "Result": 0, "MODE": 1, "diag": ["mvLo"] } },
+        { "in": { "CasGood": true, "CasIn": "NaN", "ReqSeq": 5, "ReqValue": 2 }, "expect": { "Result": 0, "MODE": 2, "SP": 300, "BkCas": true } },
+        { "in": { "TrkOn": true, "TrkVal": 20 }, "expect": { "MODE": 2, "BkCas": false, "MV": 20 } }
+      ]
+    },
+    {
+      "id": "PI-12", "title": "I-PD は CAS 中だけ PI-D になる（上位の SP の変化に比例が効く）", "req": ["4 章", "13 章 1"],
+      "config": "base", "cfg": { "Alg": 1 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "CasIn": 50, "CasGood": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 2, "ReqWriter": 1 }, "expect": { "MODE": 2, "SP": 50, "MV": 50 } },
+        { "in": { "CasIn": 40 }, "expect": { "SP": 40, "MV": 60 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 1 }, "expect": { "MODE": 1, "MV": 60 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 2, "ReqValue": 30 }, "expect": { "SP": 30, "MV": 60 } }
+      ]
+    },
+    {
+      "id": "PI-13", "title": "要求の口：パラメーター・SP・MV と断る理由の番号。MvLo を上げると MAN でも MV を切る", "req": ["9 章", "14-4"],
+      "config": "base",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "AckSeq": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 10, "ReqValue": 0.5, "ReqWriter": 2 }, "expect": { "Result": 12, "cfg.PB": 100 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 1000 }, "expect": { "Result": 0, "cfg.PB": 1000 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 11, "ReqValue": 10000.5 }, "expect": { "Result": 12 } },
+        { "in": { "ReqSeq": 4, "ReqValue": 0 }, "expect": { "Result": 0, "cfg.TI": 0 } },
+        { "in": { "ReqSeq": 5, "ReqItem": 12, "ReqValue": -1 }, "expect": { "Result": 12, "cfg.TD": 0 } },
+        { "in": { "ReqSeq": 6, "ReqItem": 13, "ReqValue": 60 }, "expect": { "Result": 0, "cfg.MvLo": 60, "MV": 60, "diag": ["mvLo"] } },
+        { "in": { "ReqSeq": 7, "ReqItem": 14, "ReqValue": 50 }, "expect": { "Result": 13, "cfg.MvHi": 100 } },
+        { "in": { "ReqSeq": 8, "ReqItem": 13, "ReqValue": 101 }, "expect": { "Result": 12, "cfg.MvLo": 60 } },
+        { "in": { "ReqSeq": 9, "ReqItem": 1, "ReqValue": 3, "ReqWriter": 1 }, "expect": { "Result": 8, "MODE": 0 } },
+        { "in": { "ReqSeq": 10, "ReqValue": 1.5 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 11, "ReqItem": 10, "ReqValue": 100 }, "expect": { "Result": 2, "cfg.PB": 1000 } },
+        { "in": { "ReqSeq": 12, "ReqItem": 99 }, "expect": { "Result": 1 } },
+        { "in": { "ReqSeq": 13, "ReqItem": 2, "ReqValue": "NaN" }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 14, "ReqValue": 100.25 }, "expect": { "Result": 3, "SP": 50 } },
+        { "in": { "ReqSeq": 15, "ReqValue": 100 }, "expect": { "Result": 0, "SP": 100, "cfg.SP": 100 } },
+        { "in": { "ReqSeq": 16, "ReqItem": 3, "ReqValue": 59.75 }, "expect": { "Result": 5, "MV": 60 } },
+        { "in": { "ReqSeq": 17, "ReqValue": 70 }, "expect": { "Result": 0, "MV": 70, "cfg.MV": 70 } }
+      ]
+    },
+    {
+      "id": "PI-14", "title": "Init：MAN にする。SP・MV は保持した値。入っている要求は処理しない", "req": ["7 章", "13 章 6"],
+      "config": "base", "cfg": { "Mode": 1, "SP": 30, "MV": 70 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 3, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MODE": 0, "SP": 30, "MV": 70, "AckSeq": 3 } },
+        { "expect": { "MODE": 0, "MV": 70 } }
+      ]
+    },
+    {
+      "id": "PI-15", "title": "dt = 0 は計算せず前の値も更新しない（SP の変化は次のスキャンで効く）。dt は 1 s で打ち切り", "req": ["7 章", "14-3"],
+      "config": "base", "cfg": { "TI": 1 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MV": 50 } },
+        { "in": { "dt": 0, "ReqSeq": 2, "ReqItem": 2, "ReqValue": 40 }, "expect": { "SP": 40, "MV": 50 } },
+        { "in": { "dt": 0.25 }, "expect": { "MV": 62.5 } },
+        { "in": { "dt": 5 }, "expect": { "MV": 72.5, "dtClamp": true, "STS": 257, "diag": ["dtClamp"] } }
+      ]
+    },
+    {
+      "id": "PI-16", "title": "設定異常：MV 保持・計算しない。戻ったら Init と同じ（MAN）", "req": ["6 章", "14-9", "C-8"],
+      "config": "base",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MODE": 1 } },
+        { "in": { "PV": 60 }, "cfgSet": { "PB": 0 }, "expect": { "cfgErr": true, "MV": 50, "STS": 129, "MODE": 1, "diag": ["cfgErr"] } },
+        { "cfgSet": { "PB": 100 }, "expect": { "cfgErr": false, "MODE": 0, "MV": 50, "diag": [] } },
+        { "cfgSet": { "EuHi": 0 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "EuHi": 100, "Mode": 3 }, "expect": { "cfgErr": true, "MODE": 0 } }
+      ]
+    },
+    {
+      "id": "PI-18", "title": "基本形 PID の微分は偏差 e から：SP を変えたスキャンで微分が効く", "req": ["2 章", "14-10"],
+      "note": "K = 0.5、η·TD = 0.25、dt 0.25。SP 50 → 40 で e = 10：Δe = 10、D = (0.25×0 + 2.5×10)/0.5 = 50、MV = 20 + 0.5×(10 + 50) = 50。次は D = 25 で MV = 50 + 0.5×(25 − 50) = 37.5、その次は D = 12.5 で 31.25",
+      "config": "base", "cfg": { "PB": 200, "TD": 2.5, "MV": 20 },
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 20, "MODE": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 0, "MODE": 1, "MV": 20 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 40 }, "expect": { "Result": 0, "SP": 40, "MV": 50 } },
+        { "expect": { "MV": 37.5 } },
+        { "expect": { "MV": 31.25 } }
+      ]
+    },
+    {
+      "id": "PI-19", "title": "設定異常のあいだの MV 出力は、保持している Cfg.MV（数でなければ前の出力）", "req": ["6 章", "14-9"],
+      "config": "base",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MV": 50 } },
+        { "cfgSet": { "EuHi": "NaN" }, "expect": { "cfgErr": true, "MV": 50 } },
+        { "cfgSet": { "MV": 30 }, "expect": { "cfgErr": true, "MV": 30 } },
+        { "cfgSet": { "MV": "NaN" }, "expect": { "cfgErr": true, "MV": 30 } }
+      ]
+    },
+    {
+      "id": "PI-20", "title": "Init のスキャンではトラッキングを見ない（下流の戻り信号がまだ既定値）。次のスキャンから追従", "req": ["14-11"],
+      "config": "base",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0, "TrkOn": true, "TrkVal": 0 }, "expect": { "MV": 50, "diag": [], "MODE": 0 } },
+        { "in": { "TrkVal": 40 }, "expect": { "MV": 40, "diag": ["trk"] } },
+        { "in": { "TrkOn": false }, "expect": { "MV": 40, "diag": [] } }
+      ]
+    },
+    {
+      "id": "PI-21", "title": "外部リセット：MV = F + K×e、F は ErfVal の一次遅れ。自分の MV を返せば比例＋積分、低い値を返されれば下がる。外したら速度形で続く。トラッキングが優先", "req": ["15-2", "15-4", "15-5"],
+      "config": "base", "cfg": { "TI": 1 },
+      "note": "s4：F = 50 + (60 − 50)×0.2 = 52、MV = 52 + 10。s6：F = 54 + (30 − 54)×0.2 = 49.2。s7：速度形 59.2 + 0.25×10。s8：F = 20 − 10。s9：F = 10 + (20 − 10)×0.2 = 12",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0, "ErfOn": true, "ErfVal": 50 }, "expect": { "MV": 50, "MODE": 0, "diag": [] } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "MODE": 1, "MV": 50, "diag": ["erf"] } },
+        { "in": { "PV": 60 }, "expect": { "MV": 60 } },
+        { "in": { "ErfVal": 60 }, "expect": { "MV": 62 } },
+        { "in": { "ErfVal": 62 }, "expect": { "MV": 64 } },
+        { "in": { "ErfVal": 30 }, "expect": { "MV": 59.2 } },
+        { "in": { "ErfOn": false }, "expect": { "MV": 61.7, "diag": [] } },
+        { "in": { "ErfOn": true, "TrkOn": true, "TrkVal": 20 }, "expect": { "MV": 20, "diag": ["trk"] } },
+        { "in": { "TrkOn": false, "ErfVal": 20 }, "expect": { "MV": 22, "diag": ["erf"] } }
+      ]
+    },
+    {
+      "id": "PI-22", "title": "外部リセット：TI 0 なら F = ErfVal。ErfVal が数でない・dt ≦ 0 は F を変えない。MV は上下限で切る", "req": ["15-2", "15-3", "15-6"],
+      "config": "base",
+      "steps": [
+        { "in": { "Init": true, "PV": 50, "dt": 0.25, "ReqSeq": 0, "ErfOn": true, "ErfVal": 50 }, "expect": { "MV": 50 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1, "PV": 60, "ErfVal": 40 }, "expect": { "MV": 50, "diag": ["erf"] } },
+        { "in": { "ErfVal": "NaN" }, "expect": { "MV": 50 } },
+        { "in": { "dt": 0, "ErfVal": 70 }, "expect": { "MV": 50 } },
+        { "in": { "dt": 0.25 }, "expect": { "MV": 80 } },
+        { "in": { "ErfVal": 95 }, "expect": { "MV": 100, "diag": ["erf", "mvHi"] } }
+      ]
+    }
+  ]
+}

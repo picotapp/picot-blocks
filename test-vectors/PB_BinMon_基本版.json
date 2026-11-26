@@ -1,0 +1,274 @@
+{
+  "block": "PB_BinMon",
+  "spec": "spec/blocks/PB_BinMon_基本版.md v0.4・拡張_警報の抑制と代替値.md v0.2",
+  "note": "期待値は仕様書から手で起こした（NF-4）。時間は 0.25 s の倍数で組んだ（13 章）。alm の名前：Act＝動作、Fail＝入力異常。diag の名前：dtClamp・cfgErr・chFault・pending（遅延中）。BM-20〜 は抑制と代替値。diag の supp は抑制中",
+  "tolerance": { "abs": 0.0001 },
+  "configs": {
+    "supp": { "Invert": false, "OnDelay": 0, "OffDelay": 0, "Inh": 0, "FailMode": 0, "SimValue": false, "SuppMask": 1, "SuppOffT": 0, "SubOn": false, "SubValue": false },
+    "default": { "Invert": false, "OnDelay": 0, "OffDelay": 0, "Inh": 1, "FailMode": 0, "SimValue": false },
+    "lshh": { "Invert": true, "OnDelay": 1, "OffDelay": 0.5, "Inh": 0, "FailMode": 0, "SimValue": false }
+  },
+  "cases": [
+    {
+      "id": "BM-01", "title": "NO 接点・遅延なし。既定では動作の警報は無効", "req": ["処理 2", "6 章"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25 }, "expect": { "Active": false, "InAct": false, "alm": [], "q": 0, "STS": 1, "Bad": false, "MODE": 0 } },
+        { "in": { "In": true }, "expect": { "Active": true, "InAct": true, "alm": [], "ALM": 0, "ActAlm": false } },
+        { "in": { "In": false }, "expect": { "Active": false, "InAct": false } }
+      ]
+    },
+    {
+      "id": "BM-02", "title": "NC 接点（Invert）で、接点が開いたら動作・警報", "req": ["処理 2", "4 章"],
+      "config": "default", "cfg": { "Invert": true, "Inh": 0 },
+      "steps": [
+        { "in": { "Init": true, "In": true, "dt": 0.25 }, "expect": { "Active": false, "InAct": false, "alm": [] } },
+        { "in": { "In": false }, "expect": { "Active": true, "InAct": true, "alm": ["Act"], "ALM": 1, "ActAlm": true, "q": 0 } },
+        { "in": { "In": true }, "expect": { "Active": false, "alm": [], "ALM": 0 } }
+      ]
+    },
+    {
+      "id": "BM-03", "title": "ON 遅延 1 s・OFF 遅延 0.5 s。遅延中は DIAG の遅延中、品質は Good", "req": ["3 章"],
+      "config": "lshh",
+      "steps": [
+        { "in": { "Init": true, "In": true, "dt": 0.25 }, "expect": { "Active": false, "diag": [] } },
+        { "in": { "In": false }, "expect": { "InAct": true, "Active": false, "diag": ["pending"], "DIAG": 8, "q": 0, "alm": [] } },
+        { "expect": { "Active": false, "diag": ["pending"] } },
+        { "expect": { "Active": false, "diag": ["pending"] } },
+        { "expect": { "Active": true, "alm": ["Act"], "diag": [] } },
+        { "in": { "In": true }, "expect": { "InAct": false, "Active": true, "diag": ["pending"], "alm": ["Act"] } },
+        { "expect": { "Active": false, "alm": [], "diag": [] } }
+      ]
+    },
+    {
+      "id": "BM-04", "title": "遅延より短いチャタリングでは切り替わらず、経過時間は 0 に戻る", "req": ["3 章"],
+      "config": "lshh",
+      "steps": [
+        { "in": { "Init": true, "In": true, "dt": 0.25 }, "expect": { "Active": false } },
+        { "in": { "In": false }, "expect": { "Active": false, "diag": ["pending"] } },
+        { "expect": { "Active": false } },
+        { "expect": { "Active": false } },
+        { "in": { "In": true }, "expect": { "Active": false, "diag": [] } },
+        { "in": { "In": false }, "expect": { "Active": false, "diag": ["pending"] } },
+        { "expect": { "Active": false } },
+        { "expect": { "Active": false } },
+        { "expect": { "Active": true, "alm": ["Act"] } }
+      ]
+    },
+    {
+      "id": "BM-05", "title": "遅延 0 は dt = 0 でも切り替わる。dt ≦ 0 では経過時間が進まない", "req": ["3 章", "7 章", "13-6"],
+      "config": "default", "cfg": { "OnDelay": 0, "OffDelay": 0.5 },
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0 }, "expect": { "Active": false } },
+        { "in": { "In": true }, "expect": { "Active": true } },
+        { "in": { "In": false }, "expect": { "Active": true, "diag": ["pending"] } },
+        { "in": { "dt": -1 }, "expect": { "Active": true, "diag": ["pending"] } },
+        { "in": { "dt": 0.25 }, "expect": { "Active": true, "diag": ["pending"] } },
+        { "expect": { "Active": false, "diag": [] } }
+      ]
+    },
+    {
+      "id": "BM-06", "title": "dt が 1 s を超えたら 1 s で打ち切り、STS bit8・DIAG bit0", "req": ["7 章", "C-3"],
+      "config": "default", "cfg": { "OnDelay": 2, "Inh": 0 },
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25 }, "expect": { "Active": false, "dtClamp": false } },
+        { "in": { "In": true, "dt": 5 }, "expect": { "Active": false, "dtClamp": true, "diag": ["dtClamp", "pending"], "STS": 257 } },
+        { "expect": { "Active": true, "alm": ["Act"], "diag": ["dtClamp"] } },
+        { "in": { "dt": 0.25 }, "expect": { "dtClamp": false, "diag": [], "STS": 1 } }
+      ]
+    },
+    {
+      "id": "BM-07", "title": "Init では遅延なしで今の入力に合わせる", "req": ["7 章"],
+      "config": "lshh",
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25 }, "expect": { "Active": true, "alm": ["Act"], "diag": [] } },
+        { "in": { "In": true }, "expect": { "Active": true, "diag": ["pending"] } },
+        { "in": { "Init": true }, "expect": { "Active": false, "alm": [], "diag": [] } }
+      ]
+    },
+    {
+      "id": "BM-08", "title": "入力異常（FailMode 0 保持）。遅延の数えは止まり、戻ったら遅延なしで合わせる", "req": ["処理 3・5", "4 章", "5 章", "13-2"],
+      "config": "lshh",
+      "steps": [
+        { "in": { "Init": true, "In": true, "dt": 0.25 }, "expect": { "Active": false } },
+        { "in": { "In": false }, "expect": { "Active": false, "diag": ["pending"] } },
+        { "in": { "ChFault": true }, "expect": { "Active": false, "alm": ["Fail"], "ALM": 2, "Fail": true, "ActAlm": false, "q": 2, "cause": 1, "Bad": true, "diag": ["chFault"], "DIAG": 4, "STS": 49 } },
+        { "expect": { "Active": false, "alm": ["Fail"] } },
+        { "expect": { "Active": false, "alm": ["Fail"] } },
+        { "expect": { "Active": false, "alm": ["Fail"] } },
+        { "expect": { "Active": false, "alm": ["Fail"] } },
+        { "in": { "ChFault": false }, "expect": { "Active": true, "alm": ["Act"], "q": 0, "Bad": false, "diag": [], "Fail": false } }
+      ]
+    },
+    {
+      "id": "BM-09", "title": "入力異常（FailMode 1 動作にする）。動作の警報は出さず入力異常だけ", "req": ["処理 5", "4 章"],
+      "config": "lshh", "cfg": { "FailMode": 1 },
+      "steps": [
+        { "in": { "Init": true, "In": true, "dt": 0.25 }, "expect": { "Active": false, "alm": [] } },
+        { "in": { "ChFault": true }, "expect": { "Active": true, "alm": ["Fail"], "ActAlm": false, "Fail": true, "Bad": true } },
+        { "in": { "ChFault": false }, "expect": { "Active": false, "alm": [], "Bad": false } }
+      ]
+    },
+    {
+      "id": "BM-10", "title": "入力異常（FailMode 2 非動作にする）", "req": ["処理 5"],
+      "config": "lshh", "cfg": { "FailMode": 2 },
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25 }, "expect": { "Active": true, "alm": ["Act"] } },
+        { "in": { "ChFault": true }, "expect": { "Active": false, "alm": ["Fail"] } },
+        { "in": { "ChFault": false }, "expect": { "Active": true, "alm": ["Act"] } }
+      ]
+    },
+    {
+      "id": "BM-11", "title": "停止はエンジニアだけ。停止中は Active 保持・警報なし・入力異常も見ない。戻ると遅延なしで合わせる", "req": ["5 章", "9 章", "13-5", "M-4"],
+      "config": "lshh",
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Active": true, "alm": ["Act"], "AckSeq": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 2, "AckSeq": 1, "oos": false, "alm": ["Act"] } },
+        { "in": { "ReqSeq": 2, "ReqWriter": 2 }, "expect": { "Result": 0, "AckSeq": 2, "oos": true, "q": 3, "alm": [], "Active": true, "Bad": true, "STS": 26, "InAct": true } },
+        { "in": { "In": true }, "expect": { "Active": true, "InAct": false, "alm": [], "q": 3 } },
+        { "in": { "ChFault": true }, "expect": { "alm": [], "diag": [], "q": 3, "Fail": false } },
+        { "in": { "ChFault": false, "ReqSeq": 3, "ReqValue": 0 }, "expect": { "Result": 0, "oos": false, "Active": false, "alm": [], "q": 0, "STS": 1, "Bad": false } }
+      ]
+    },
+    {
+      "id": "BM-12", "title": "模擬：模擬値は意味の値で、遅延と警報を通る。模擬中は入力異常を見ない。切ると遅延なしで今の入力に合わせる", "req": ["処理 1", "12 章 4", "13-3", "13-4"],
+      "config": "lshh",
+      "steps": [
+        { "in": { "Init": true, "In": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Active": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 3, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "cfg.SimValue": true, "sim": false, "Active": false, "InAct": false } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 1 }, "expect": { "Result": 0, "sim": true, "manip": true, "InAct": true, "Active": false, "diag": ["pending"], "q": 0 } },
+        { "expect": { "Active": false } },
+        { "expect": { "Active": false } },
+        { "expect": { "Active": true, "alm": ["Act"], "STS": 69 } },
+        { "in": { "ChFault": true }, "expect": { "Active": true, "alm": ["Act"], "diag": [], "Fail": false, "q": 0 } },
+        { "in": { "ChFault": false, "ReqSeq": 3, "ReqItem": 2, "ReqValue": 0 }, "expect": { "Result": 0, "sim": false, "manip": false, "InAct": false, "Active": false, "alm": [], "STS": 1 } }
+      ]
+    },
+    {
+      "id": "BM-13", "title": "模擬中に停止にしたら停止が優先。停止を戻すと模擬値に合わせる", "req": ["5 章", "M-3"],
+      "config": "default", "cfg": { "Inh": 0 },
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Active": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 3, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 1 }, "expect": { "Result": 0, "Active": true, "alm": ["Act"] } },
+        { "in": { "ReqSeq": 3, "ReqItem": 1, "ReqValue": 1 }, "expect": { "Result": 0, "q": 3, "alm": [], "sim": true, "manip": false, "STS": 30, "Active": true } },
+        { "in": { "ReqSeq": 4, "ReqItem": 1, "ReqValue": 0 }, "expect": { "Result": 0, "Active": true, "alm": ["Act"], "STS": 69 } }
+      ]
+    },
+    {
+      "id": "BM-14", "title": "要求の口：遅延・警報の有効無効・模擬値と、断る理由の番号", "req": ["9 章"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25, "ReqSeq": 0 }, "expect": { "AckSeq": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 10, "ReqValue": 2.5, "ReqWriter": 2 }, "expect": { "Result": 0, "AckSeq": 1, "cfg.OnDelay": 2.5 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 11, "ReqValue": 60 }, "expect": { "Result": 0, "cfg.OffDelay": 60 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 10, "ReqValue": 60.25 }, "expect": { "Result": 12, "cfg.OnDelay": 2.5 } },
+        { "in": { "ReqSeq": 4, "ReqItem": 11, "ReqValue": -0.25 }, "expect": { "Result": 12, "cfg.OffDelay": 60 } },
+        { "in": { "ReqSeq": 5, "ReqItem": 10, "ReqValue": "NaN" }, "expect": { "Result": 8, "cfg.OnDelay": 2.5 } },
+        { "in": { "ReqSeq": 6, "ReqItem": 16, "ReqValue": 1 }, "expect": { "Result": 0, "cfg.Inh": 0 } },
+        { "in": { "ReqSeq": 7, "ReqItem": 16, "ReqValue": 0.5 }, "expect": { "Result": 8, "cfg.Inh": 0 } },
+        { "in": { "ReqSeq": 8, "ReqItem": 16, "ReqValue": 0 }, "expect": { "Result": 0, "cfg.Inh": 1 } },
+        { "in": { "ReqSeq": 9, "ReqItem": 12, "ReqValue": 1 }, "expect": { "Result": 1, "AckSeq": 9 } },
+        { "in": { "ReqSeq": 10, "ReqItem": 10, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 2, "cfg.OnDelay": 2.5 } },
+        { "in": { "ReqItem": 11, "ReqValue": 5, "ReqWriter": 2 }, "expect": { "Result": 2, "AckSeq": 10, "cfg.OffDelay": 60 } },
+        { "in": { "ReqSeq": 11, "ReqItem": 2, "ReqValue": 2 }, "expect": { "Result": 8, "sim": false } },
+        { "in": { "ReqSeq": 12, "ReqItem": 3, "ReqValue": "Inf" }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 13, "ReqItem": 3, "ReqValue": 0 }, "expect": { "Result": 0, "cfg.SimValue": false } },
+        { "in": { "ReqSeq": 14, "ReqItem": 10, "ReqValue": 1, "ReqWriter": 3 }, "expect": { "Result": 2 } },
+        { "in": { "ReqSeq": 15, "ReqItem": 99, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 1 } }
+      ]
+    },
+    {
+      "id": "BM-15", "title": "Init のスキャンに入っている要求は処理しない", "req": ["7 章"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25, "ReqSeq": 5, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "AckSeq": 5, "oos": false, "STS": 1 } },
+        { "expect": { "AckSeq": 5, "oos": false } },
+        { "in": { "ReqSeq": 6 }, "expect": { "AckSeq": 6, "Result": 0, "oos": true } }
+      ]
+    },
+    {
+      "id": "BM-16", "title": "設定異常：Active 保持・警報なし・Bad（計器）。戻ったら遅延なしで合わせる。60 s 超の遅延は設定異常にしない", "req": ["6 章", "C-8"],
+      "config": "default", "cfg": { "Inh": 0 },
+      "steps": [
+        { "in": { "Init": true, "In": true, "dt": 0.25 }, "expect": { "Active": true, "alm": ["Act"] } },
+        { "cfgSet": { "OnDelay": "NaN" }, "expect": { "cfgErr": true, "q": 2, "cause": 1, "alm": [], "Active": true, "diag": ["cfgErr"], "Bad": true, "STS": 177 } },
+        { "in": { "In": false }, "expect": { "Active": true, "InAct": false, "alm": [] } },
+        { "cfgSet": { "OnDelay": 0 }, "expect": { "cfgErr": false, "Active": false, "alm": [], "q": 0, "STS": 1 } },
+        { "cfgSet": { "FailMode": 3 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "FailMode": 0, "OffDelay": -1 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "OffDelay": "Inf" }, "expect": { "cfgErr": true } },
+        { "in": { "In": true }, "cfgSet": { "OffDelay": 100 }, "expect": { "cfgErr": false, "Active": true, "alm": ["Act"] } }
+      ]
+    },
+    {
+      "id": "BM-17", "title": "遅延中に遅延時間を変えると、経過時間はそのままで、そのスキャンから新しい値と比べる", "req": ["3 章", "13-1"],
+      "config": "default", "cfg": { "OnDelay": 1, "Inh": 0 },
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Active": false } },
+        { "in": { "In": true }, "expect": { "Active": false, "diag": ["pending"] } },
+        { "expect": { "Active": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 10, "ReqValue": 0.5, "ReqWriter": 2 }, "expect": { "Result": 0, "Active": true, "alm": ["Act"], "diag": [] } }
+      ]
+    },
+    {
+      "id": "BM-18", "title": "遅延があるとき、設定異常から戻ったスキャンは遅延なしで今の入力に合わせる", "req": ["7 章"],
+      "note": "Init と同じ扱いでなければ s3 は ON 遅延（1 s）の待ちに入り Active = FALSE のまま",
+      "config": "default", "cfg": { "OnDelay": 1, "OffDelay": 1, "Inh": 0 },
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25 }, "expect": { "Active": false } },
+        { "cfgSet": { "FailMode": 3 }, "in": { "In": true }, "expect": { "cfgErr": true, "Active": false, "InAct": true } },
+        { "cfgSet": { "FailMode": 0 }, "expect": { "cfgErr": false, "Active": true, "alm": ["Act"], "diag": [] } },
+        { "in": { "In": false }, "expect": { "Active": true, "diag": ["pending"] } }
+      ]
+    },
+    {
+      "id": "BM-19", "title": "停止中に Init：Active を今の入力に合わせる（停止中のまま、警報は出さない）", "req": ["7 章", "5 章"],
+      "note": "Init はモード（停止・模擬）を変えない（7 章は Active・経過時間・警報だけ）",
+      "config": "default", "cfg": { "OnDelay": 1, "Inh": 0 },
+      "steps": [
+        { "in": { "Init": true, "In": false, "dt": 0.25, "ReqSeq": 0, "ReqItem": 0, "ReqValue": 0, "ReqWriter": 0 }, "expect": { "Active": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "q": 3, "Active": false } },
+        { "in": { "In": true }, "expect": { "Active": false, "InAct": true, "q": 3 } },
+        { "in": { "Init": true }, "expect": { "Active": true, "q": 3, "oos": true, "alm": [], "AckSeq": 1 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 1, "ReqValue": 0 }, "expect": { "Result": 0, "Active": true, "q": 0, "alm": ["Act"] } }
+      ]
+    },
+    {
+      "id": "BM-20", "title": "抑制：動作の警報を ALM から外し SUPALM に。ActAlm は抑制の前のまま。入力異常は抑制しない", "req": ["拡張 1 章", "8-3"],
+      "config": "supp",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": false }, "expect": { "ALM": 0, "SUPALM": 0 } },
+        { "in": { "In": true }, "expect": { "Active": true, "ActAlm": true, "alm": ["Act"] } },
+        { "in": { "Supp": true }, "expect": { "ALM": 0, "SUPALM": 1, "ActAlm": true, "diag": ["supp"] } },
+        { "in": { "ChFault": true }, "expect": { "alm": ["Fail"], "SUPALM": 0, "ActAlm": false } },
+        { "in": { "ChFault": false, "Supp": false }, "expect": { "alm": ["Act"], "SUPALM": 0, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "BM-21", "title": "抑制をやめるのは SuppOffT の後（Init では Supp の今の値から）", "req": ["8-2"],
+      "config": "supp", "cfg": { "SuppOffT": 0.5 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": true, "Supp": true }, "expect": { "ALM": 0, "SUPALM": 1, "diag": ["supp"] } },
+        { "in": { "Supp": false }, "expect": { "ALM": 0, "SUPALM": 1 } },
+        { "in": {}, "expect": { "alm": ["Act"], "SUPALM": 0, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "BM-22", "title": "代替値：Active = SubValue、動作の警報は判定しない、入力異常は判定する。品質 Uncertain・Bad FALSE", "req": ["拡張 2 章", "8-5", "8-6", "8-8"],
+      "config": "supp",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": false }, "expect": { "Active": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 4, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "cfg.SubOn": true, "Active": false, "q": 1, "cause": 1, "manip": true } },
+        { "in": { "ReqSeq": 2, "ReqItem": 5 }, "expect": { "Result": 0, "cfg.SubValue": true, "Active": true, "ActAlm": false, "ALM": 0 } },
+        { "in": { "ChFault": true }, "expect": { "Active": true, "Fail": true, "alm": ["Fail"], "q": 1, "Bad": false } },
+        { "in": { "ChFault": false, "ReqSeq": 3, "ReqItem": 4, "ReqValue": 0 }, "expect": { "Result": 0, "Active": false, "q": 0, "manip": false } },
+        { "in": { "ReqSeq": 4, "ReqWriter": 1, "ReqValue": 1 }, "expect": { "Result": 2, "cfg.SubOn": false } },
+        { "in": { "ReqSeq": 5, "ReqWriter": 2, "ReqItem": 5, "ReqValue": 2 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 6, "ReqItem": 22, "ReqValue": 4 }, "expect": { "Result": 12 } },
+        { "in": { "ReqSeq": 7, "ReqItem": 23, "ReqValue": 10 }, "expect": { "Result": 0, "cfg.SuppOffT": 10 } },
+        { "cfgSet": { "SuppMask": 4 }, "expect": { "cfgErr": true } }
+      ]
+    }
+  ]
+}

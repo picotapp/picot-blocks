@@ -1,0 +1,148 @@
+{
+  "block": "PB_ReqDispatch",
+  "spec": "spec/blocks/PB_ReqDispatch_基本版.md v0.2",
+  "note": "期待値は仕様書から手で起こした（NF-4）。宛先のブロックは置かず、portSet で口の AckSeq・Result を書いて「宛先が処理した」を表す（宛先をこのブロックの後に呼んだ形：始めたスキャンの次のスキャンの前に書く）。expect の port.<番号>.<要素> は口の値。diag の名前：dtClamp・cfgErr・busy・timeout",
+  "tolerance": { "abs": 0.0001 },
+  "configs": {
+    "default": { "NumPorts": 64, "TimeOut": 1.0 },
+    "small": { "NumPorts": 3, "TimeOut": 1.0 }
+  },
+  "cases": [
+    {
+      "id": "RD-01", "title": "1 件の流れ：宛先の口に渡し、返事を受付箱に写す。他の口は変えない", "req": ["3 章", "13-1", "13-4"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "BoxSeq": 0 }, "expect": { "BoxAck": 0, "BoxResult": 0, "Busy": false, "Alive": 1, "STS": 1, "MODE": 0, "ALM": 0, "DIAG": 0 } },
+        { "in": { "BoxSeq": 1, "BoxTag": 2, "BoxItem": 3, "BoxValue": 12.5, "BoxWriter": 1 }, "expect": { "Busy": true, "BoxAck": 0, "port.2.Seq": 1, "port.2.Item": 3, "port.2.Value": 12.5, "port.2.Writer": 1, "port.1.Seq": 0, "port.3.Seq": 0, "diag": ["busy"], "DIAG": 4, "Alive": 2 } },
+        { "portSet": { "2": { "AckSeq": 1, "Result": 5 } }, "expect": { "BoxAck": 1, "BoxResult": 5, "Busy": false, "diag": [], "Alive": 3 } },
+        { "in": { "BoxSeq": 2, "BoxItem": 1, "BoxValue": 0 }, "expect": { "Busy": true, "BoxAck": 1, "BoxResult": 5, "port.2.Seq": 2, "port.2.Item": 1, "port.2.Value": 0 } },
+        { "portSet": { "2": { "AckSeq": 2, "Result": 0 } }, "expect": { "BoxAck": 2, "BoxResult": 0, "Busy": false } },
+        { "expect": { "BoxAck": 2, "Busy": false, "port.2.Seq": 2 } }
+      ]
+    },
+    {
+      "id": "RD-02", "title": "宛先の番号が 1〜NumPorts の外なら、そのスキャンで結果 15。口は変えない", "req": ["4 章", "13-7"],
+      "config": "small",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "BoxAck": 0 } },
+        { "in": { "BoxSeq": 1, "BoxTag": 4, "BoxItem": 1, "BoxValue": 1, "BoxWriter": 1 }, "expect": { "BoxAck": 1, "BoxResult": 15, "Busy": false, "port.4.Seq": 0, "diag": [] } },
+        { "in": { "BoxSeq": 2, "BoxTag": 0 }, "expect": { "BoxAck": 2, "BoxResult": 15, "Busy": false } },
+        { "in": { "BoxSeq": 3, "BoxTag": 3 }, "expect": { "BoxAck": 2, "Busy": true, "port.3.Seq": 1 } }
+      ]
+    },
+    {
+      "id": "RD-03", "title": "時間切れ：TimeOut 1 s で結果 16。遅れて来た返事は無視。次の要求で時間切れの印は消え、待ち時間は 0 から数え直す", "req": ["3 章", "13-3", "13-8"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "BoxAck": 0 } },
+        { "in": { "BoxSeq": 7, "BoxTag": 5, "BoxItem": 1, "BoxValue": 1, "BoxWriter": 2 }, "expect": { "Busy": true, "port.5.Seq": 1, "port.5.Writer": 2 } },
+        { "expect": { "Busy": true, "BoxAck": 0 } },
+        { "expect": { "Busy": true } },
+        { "expect": { "Busy": true, "BoxAck": 0 } },
+        { "expect": { "Busy": false, "BoxAck": 7, "BoxResult": 16, "diag": ["timeout"], "DIAG": 8 } },
+        { "portSet": { "5": { "AckSeq": 1, "Result": 0 } }, "expect": { "BoxAck": 7, "BoxResult": 16, "Busy": false, "diag": ["timeout"] } },
+        { "in": { "BoxSeq": 8 }, "expect": { "Busy": true, "port.5.Seq": 2, "diag": ["busy"] } },
+        { "expect": { "Busy": true, "BoxAck": 7 } },
+        { "expect": { "Busy": true } },
+        { "expect": { "Busy": true } },
+        { "expect": { "Busy": false, "BoxAck": 8, "BoxResult": 16 } }
+      ]
+    },
+    {
+      "id": "RD-04", "title": "返事と時間切れが同じスキャンなら返事を先に見る", "req": ["13-2"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.5 }, "expect": { "BoxAck": 0 } },
+        { "in": { "BoxSeq": 1, "BoxTag": 1, "BoxItem": 2, "BoxValue": 40, "BoxWriter": 1 }, "expect": { "Busy": true } },
+        { "expect": { "Busy": true } },
+        { "portSet": { "1": { "AckSeq": 1, "Result": 4 } }, "expect": { "Busy": false, "BoxAck": 1, "BoxResult": 4, "diag": [] } }
+      ]
+    },
+    {
+      "id": "RD-05", "title": "処理中に次の要求が来たら、今の 1 件を終えてから。返事をしたスキャンでは始めない。口の中身は始めたときのまま", "req": ["3 章", "13-1", "13-5"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "BoxAck": 0 } },
+        { "in": { "BoxSeq": 1, "BoxTag": 2, "BoxItem": 3, "BoxValue": 10, "BoxWriter": 1 }, "expect": { "Busy": true, "port.2.Seq": 1, "port.2.Item": 3 } },
+        { "in": { "BoxSeq": 2, "BoxTag": 1, "BoxItem": 9, "BoxValue": 20 }, "expect": { "Busy": true, "BoxAck": 0, "port.1.Seq": 0, "port.2.Item": 3, "port.2.Value": 10 } },
+        { "portSet": { "2": { "AckSeq": 1, "Result": 0 } }, "expect": { "Busy": false, "BoxAck": 1, "BoxResult": 0, "port.1.Seq": 0 } },
+        { "expect": { "Busy": true, "BoxAck": 1, "port.1.Seq": 1, "port.1.Item": 9, "port.1.Value": 20 } },
+        { "portSet": { "1": { "AckSeq": 1, "Result": 12 } }, "expect": { "Busy": false, "BoxAck": 2, "BoxResult": 12 } }
+      ]
+    },
+    {
+      "id": "RD-06", "title": "口の Seq は 32767 の次が 1", "req": ["13-6"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "portSet": { "2": { "Seq": 32767, "AckSeq": 32767 } }, "expect": { "BoxAck": 0 } },
+        { "in": { "BoxSeq": 1, "BoxTag": 2, "BoxItem": 1, "BoxValue": 1, "BoxWriter": 1 }, "expect": { "Busy": true, "port.2.Seq": 1 } }
+      ]
+    },
+    {
+      "id": "RD-07", "title": "dt 0 では待ち時間は進まない。dt 2 s は 1 s に打ち切り。Init で時間切れの印は消える", "req": ["7 章", "13-3"],
+      "config": "default", "cfg": { "TimeOut": 1.5 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "BoxAck": 0 } },
+        { "in": { "BoxSeq": 1, "BoxTag": 1, "BoxItem": 1, "BoxValue": 1, "BoxWriter": 1, "dt": 0 }, "expect": { "Busy": true } },
+        { "expect": { "Busy": true } },
+        { "expect": { "Busy": true } },
+        { "in": { "dt": 2 }, "expect": { "Busy": true, "dtClamp": true, "STS": 257, "diag": ["busy", "dtClamp"], "DIAG": 5 } },
+        { "in": { "dt": 0.25 }, "expect": { "Busy": true, "STS": 1 } },
+        { "expect": { "Busy": false, "BoxAck": 1, "BoxResult": 16, "diag": ["timeout"] } },
+        { "in": { "Init": true }, "expect": { "Busy": false, "BoxAck": 1, "BoxResult": 16, "diag": [] } }
+      ]
+    },
+    {
+      "id": "RD-08", "title": "Init：入っていた要求は処理せず BoxAck を合わせ、処理中を外す。Result はそのまま。Alive は戻さない", "req": ["7 章", "13-9"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "Alive": 1 } },
+        { "in": { "BoxSeq": 1, "BoxTag": 1, "BoxItem": 1, "BoxValue": 1, "BoxWriter": 1 }, "expect": { "Busy": true } },
+        { "portSet": { "1": { "AckSeq": 1, "Result": 9 } }, "expect": { "BoxAck": 1, "BoxResult": 9 } },
+        { "in": { "BoxSeq": 2 }, "expect": { "Busy": true, "port.1.Seq": 2 } },
+        { "in": { "Init": true }, "expect": { "Busy": false, "BoxAck": 2, "BoxResult": 9, "Alive": 5, "diag": [] } },
+        { "portSet": { "1": { "AckSeq": 2, "Result": 0 } }, "expect": { "Busy": false, "BoxAck": 2, "BoxResult": 9 } },
+        { "in": { "Init": true, "BoxSeq": 5 }, "expect": { "BoxAck": 5, "Busy": false, "port.1.Seq": 2 } }
+      ]
+    },
+    {
+      "id": "RD-09", "title": "設定異常：処理中を外し、受付箱を見ない。Alive は進む。戻ったら Init と同じ", "req": ["6 章", "13-10"],
+      "config": "small",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "Alive": 1, "cfgErr": false } },
+        { "in": { "BoxSeq": 1, "BoxTag": 1, "BoxItem": 1, "BoxValue": 1, "BoxWriter": 1 }, "expect": { "Busy": true, "port.1.Seq": 1 } },
+        { "cfgSet": { "NumPorts": 0 }, "expect": { "Busy": false, "BoxAck": 0, "cfgErr": true, "STS": 129, "diag": ["cfgErr"], "DIAG": 2, "Alive": 3 } },
+        { "in": { "BoxSeq": 2 }, "portSet": { "1": { "AckSeq": 1, "Result": 0 } }, "expect": { "BoxAck": 0, "BoxResult": 0, "Busy": false, "port.1.Seq": 1, "Alive": 4 } },
+        { "cfgSet": { "NumPorts": 3 }, "expect": { "cfgErr": false, "STS": 1, "BoxAck": 2, "Busy": false, "port.1.Seq": 1 } },
+        { "in": { "BoxSeq": 3 }, "expect": { "Busy": true, "port.1.Seq": 2 } }
+      ]
+    },
+    {
+      "id": "RD-10", "title": "設定異常になる値：NumPorts 0・65・小数、TimeOut 0・負・NaN・無限大。10 s を超える TimeOut は異常にしない", "req": ["6 章"],
+      "config": "small", "cfg": { "NumPorts": 65 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "NumPorts": 2.5 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "NumPorts": 64, "TimeOut": 0 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "TimeOut": -1 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "TimeOut": "NaN" }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "TimeOut": "Inf" }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "TimeOut": 20 }, "expect": { "cfgErr": false, "STS": 1 } }
+      ]
+    },
+    {
+      "id": "RD-11", "title": "時間切れの印は設定異常のあいだは出さない。戻ったら Init と同じで消える", "req": ["13-8", "13-10"],
+      "config": "small",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25 }, "expect": { "BoxAck": 0 } },
+        { "in": { "BoxSeq": 1, "BoxTag": 3, "BoxItem": 1, "BoxValue": 1, "BoxWriter": 1 }, "expect": { "Busy": true } },
+        { "expect": { "Busy": true } },
+        { "expect": { "Busy": true } },
+        { "expect": { "Busy": true } },
+        { "expect": { "Busy": false, "BoxResult": 16, "diag": ["timeout"] } },
+        { "cfgSet": { "NumPorts": 0 }, "expect": { "cfgErr": true, "diag": ["cfgErr"], "DIAG": 2 } },
+        { "cfgSet": { "NumPorts": 3 }, "expect": { "cfgErr": false, "diag": [], "BoxAck": 1 } }
+      ]
+    }
+  ]
+}

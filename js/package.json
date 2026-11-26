@@ -1,0 +1,17 @@
+{
+  "name": "picot-blocks-ref",
+  "version": "0.1.0",
+  "description": "PICOT Blocks の JS 参照実装（テストベクタのオラクル、兼 PICOT HMI のシミュレーター）",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "types": "./src/index.d.ts"
+}

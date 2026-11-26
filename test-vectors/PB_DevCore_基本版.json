@@ -1,0 +1,435 @@
+{
+  "block": "PB_DevCore",
+  "spec": "spec/blocks/PB_DevCore_基本版.md v0.3",
+  "note": "期待値は仕様書から手で起こした（NF-4）。時間は 0.25 s の倍数。StrokeT 1 s なので p は 1 スキャンに 25 % 進む。alm：onFail 起動失敗・offFail 停止失敗・limFail リミット異常・uncmdOn 指令外の on・uncmdOff 指令外の off。diag：dtClamp・cfgErr・moving 指令した動きの途中・pcmdRej プログラムの指令を断った・statJudge 指令外の動きを判断中",
+  "tolerance": { "abs": 0.0001 },
+  "configs": {
+    "pump": { "FbCfg": 1, "SafeState": 0, "FaultAct": 0, "FbTrack": true, "StatT": 1, "MonTOn": 2, "MonTOff": 2, "StrokeT": 1, "RunHours": 0, "RunSecFrac": 0, "Starts": 0 },
+    "valve": { "FbCfg": 3, "SafeState": 0, "FaultAct": 0, "FbTrack": false, "StatT": 0.5, "MonTOn": 2, "MonTOff": 2, "StrokeT": 1, "RunHours": 0, "RunSecFrac": 0, "Starts": 0 }
+  },
+  "cases": [
+    {
+      "id": "DC-01", "title": "ポンプの起動・停止。進み具合・残り時間・起動回数・運転時間", "req": ["6 章 2", "7 章", "8 章", "14-11〜14-14"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false, "Out": false, "State": 0, "Travel": 0, "Remain": 0, "alm": [], "MODE": 0, "STS": 1 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 0, "AckSeq": 1, "Target": true, "Out": true, "State": 2, "Travel": 25, "Remain": 0.75, "diag": ["moving"], "DIAG": 4 } },
+        { "expect": { "State": 2, "Travel": 50, "Remain": 0.5 } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "Travel": 100, "Remain": 0, "diag": [], "cfg.Starts": 1, "cfg.RunSecFrac": 0.25 } },
+        { "expect": { "cfg.RunSecFrac": 0.5 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0 }, "expect": { "Result": 0, "Target": false, "Out": false, "State": 2, "Travel": 75, "Remain": 0.75, "cfg.RunSecFrac": 0.75 } },
+        { "in": { "FbOn": false }, "expect": { "State": 0, "Travel": 0, "Remain": 0, "cfg.Starts": 1, "cfg.RunSecFrac": 0.75, "alm": [] } }
+      ]
+    },
+    {
+      "id": "DC-02", "title": "起動したのにアンサーが来ない → MonTOn で起動失敗。状態は実際の位置。もう一度起動で消えて試し直せる", "req": ["6 章 2", "14-2", "14-7", "14-13"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "State": 2, "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "Travel": 100, "Remain": 0, "State": 2 } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": [], "State": 2, "Fault": false } },
+        { "expect": { "alm": ["onFail"], "ALM": 1, "Fault": true, "State": 0, "Travel": 0, "Remain": 0, "Out": true, "Target": true, "diag": [] } },
+        { "expect": { "alm": ["onFail"], "State": 0, "Out": true } },
+        { "expect": { "alm": ["onFail"], "Target": true, "diag": [] } },
+        { "expect": { "alm": ["onFail"], "Target": true } },
+        { "expect": { "alm": ["onFail"], "Target": true } },
+        { "expect": { "alm": ["onFail"], "Target": true, "Out": true } },
+        { "in": { "ReqSeq": 2 }, "expect": { "Result": 0, "alm": [], "Fault": false, "State": 2 } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "alm": [] } }
+      ]
+    },
+    {
+      "id": "DC-03", "title": "運転中に指令なしで停止（トリップ・現場停止）→ StatT 後に目標を停止に合わせて DO を切る。情報ビットは次の指令まで残る", "req": ["6 章 3", "14-8", "14-9"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Target": true } },
+        { "in": { "FbOn": true }, "expect": { "State": 1 } },
+        { "in": { "FbOn": false }, "expect": { "State": 0, "Out": true, "Target": true, "Travel": 0, "diag": ["statJudge"], "alm": [] } },
+        { "expect": { "Out": true, "diag": ["statJudge"] } },
+        { "expect": { "Out": true, "diag": ["statJudge"] } },
+        { "expect": { "Out": false, "Target": false, "alm": ["uncmdOff"], "ALM": 16, "Fault": false, "State": 0, "diag": [] } },
+        { "expect": { "alm": ["uncmdOff"], "Out": false } },
+        { "in": { "ReqSeq": 2 }, "expect": { "Result": 0, "alm": [], "Target": true } }
+      ]
+    },
+    {
+      "id": "DC-04", "title": "ポンプ（FbTrack）を指令なしで起動（現場の MCC）→ 目標と DO を運転に合わせる。現場で止めると停止に合わせる", "req": ["6 章 1・3", "14-8", "14-9", "14-14"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0, "cfg.Starts": 0 } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "Out": false, "Travel": 100, "diag": ["statJudge"], "cfg.Starts": 1, "alm": [] } },
+        { "expect": { "Out": false } },
+        { "expect": { "Out": false } },
+        { "expect": { "Out": true, "Target": true, "alm": ["uncmdOn"], "ALM": 8, "Fault": false, "diag": [] } },
+        { "in": { "FbOn": false }, "expect": { "Out": true, "State": 0, "diag": ["statJudge"] } },
+        { "expect": { "Out": true } },
+        { "expect": { "Out": true } },
+        { "expect": { "Out": false, "Target": false, "alm": ["uncmdOn", "uncmdOff"], "ALM": 24 } }
+      ]
+    },
+    {
+      "id": "DC-05", "title": "インターロック中に指令なしで起動 → 合わせない（DO は切ったまま）、MonTOff で停止失敗。止まれば消える", "req": ["6.1", "14-7", "14-8a", "14-3"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "Intlk": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "diag": ["statJudge"], "Out": false } },
+        { "expect": { "Out": false } },
+        { "expect": { "Out": false } },
+        { "expect": { "Out": false, "Target": false, "alm": ["uncmdOn"], "diag": [] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn", "offFail"], "ALM": 10, "Fault": true, "State": 1, "Out": false } },
+        { "in": { "FbOn": false }, "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 9, "Target": false } }
+      ]
+    },
+    {
+      "id": "DC-06", "title": "弁（FbTrack なし）が指令なしで開いた → 合わせない、情報ビット、MonTOff で閉失敗。閉に戻れば消える", "req": ["6 章 1・4", "6.1"],
+      "config": "valve",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0, "Travel": 0 } },
+        { "in": { "FbOff": false }, "expect": { "State": 2, "Travel": 0, "diag": [], "alm": [] } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "Travel": 100, "diag": ["statJudge"], "Out": false } },
+        { "expect": { "alm": ["uncmdOn"], "Out": false, "Target": false, "diag": [] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn", "offFail"], "Fault": true, "State": 1, "Out": false } },
+        { "in": { "FbOn": false, "FbOff": true }, "expect": { "alm": ["uncmdOn"], "State": 0, "Travel": 0 } }
+      ]
+    },
+    {
+      "id": "DC-07", "title": "弁の開閉。閉を指令したのに開のまま → MonTOff で閉失敗（危険側）。進み具合は失敗で実際の位置に合わせる", "req": ["6 章 4", "14-7", "14-11", "14-13"],
+      "config": "valve",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Target": true, "Out": true, "State": 2, "Travel": 25, "Remain": 0.75 } },
+        { "in": { "FbOff": false }, "expect": { "State": 2, "Travel": 50, "Remain": 0.5 } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "Travel": 100, "Remain": 0 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0 }, "expect": { "Target": false, "Out": false, "State": 2, "Travel": 75, "Remain": 0.75 } },
+        { "expect": { "Travel": 50 } },
+        { "expect": { "Travel": 25 } },
+        { "expect": { "Travel": 0, "Remain": 0, "State": 2, "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": ["offFail"], "ALM": 2, "Fault": true, "State": 1, "Travel": 100, "Remain": 0, "diag": [] } },
+        { "in": { "FbOn": false }, "expect": { "alm": ["offFail"], "State": 2, "Travel": 75 } },
+        { "in": { "FbOff": true }, "expect": { "alm": [], "State": 0, "Travel": 0, "Fault": false } }
+      ]
+    },
+    {
+      "id": "DC-08", "title": "開・閉が両方 ON → すぐにリミット異常、State 3", "req": ["5 章", "DV-4"],
+      "config": "valve",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "dt": 0.25 }, "expect": { "State": 0 } },
+        { "in": { "FbOn": true }, "expect": { "State": 3, "alm": ["limFail"], "ALM": 4, "Fault": true, "Travel": 0 } },
+        { "in": { "FbOn": false }, "expect": { "State": 0, "alm": [], "Fault": false } }
+      ]
+    },
+    {
+      "id": "DC-09", "title": "インターロック・パーミッシブ・AUT とプログラムの指令（立ち上がり、同時なら安全側）", "req": ["3 章", "4 章", "14-3", "14-5", "14-6"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 0, "Target": true } },
+        { "in": { "FbOn": true }, "expect": { "State": 1 } },
+        { "in": { "Intlk": true }, "expect": { "Target": false, "Out": false, "State": 2, "diag": ["moving"] } },
+        { "in": { "FbOn": false }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 2 }, "expect": { "Result": 9, "Target": false } },
+        { "in": { "Intlk": false }, "expect": { "Target": false, "Out": false } },
+        { "in": { "Perm": false, "ReqSeq": 3 }, "expect": { "Result": 14, "Target": false } },
+        { "in": { "Perm": true, "ReqSeq": 4, "ReqItem": 2, "ReqValue": 1 }, "expect": { "Result": 0, "MODE": 1 } },
+        { "in": { "ReqSeq": 5, "ReqItem": 1, "ReqValue": 1 }, "expect": { "Result": 4, "Target": false } },
+        { "in": { "PCmdOn": true }, "expect": { "Target": true, "Out": true, "Result": 4 } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "Target": true } },
+        { "in": { "PCmdOff": true }, "expect": { "Target": false, "Out": false } },
+        { "in": { "PCmdOn": false, "PCmdOff": false, "FbOn": false }, "expect": { "State": 0 } },
+        { "in": { "PCmdOn": true }, "expect": { "Target": true } },
+        { "in": { "PCmdOn": false }, "expect": { "Target": true } },
+        { "in": { "PCmdOn": true, "PCmdOff": true }, "expect": { "Target": false, "Out": false } },
+        { "in": { "Perm": false, "PCmdOn": false, "PCmdOff": false }, "expect": { "Target": false, "diag": [] } },
+        { "in": { "PCmdOn": true }, "expect": { "Target": false, "diag": ["pcmdRej"], "DIAG": 8 } },
+        { "expect": { "Target": false, "diag": [] } }
+      ]
+    },
+    {
+      "id": "DC-10", "title": "プログラムの指令は前の値を覚える（AUT にした瞬間に入れっぱなしの指令で動かない）。MAN では無視する", "req": ["14-5"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "PCmdOn": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false } },
+        { "expect": { "Target": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 0, "MODE": 1, "Target": false } },
+        { "in": { "PCmdOn": false }, "expect": { "Target": false } },
+        { "in": { "PCmdOn": true }, "expect": { "Target": true } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0 }, "expect": { "Result": 0, "MODE": 0, "Target": true } },
+        { "in": { "PCmdOff": true }, "expect": { "Target": true } }
+      ]
+    },
+    {
+      "id": "DC-11", "title": "現場（ポンプ）：指令は断る。現場で起動したら運転に合わせ、遠方に戻しても運転を続ける。インターロックは現場でも効く", "req": ["3 章", "14-10"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "Local": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "MODE": 256 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 4, "Target": false } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "diag": ["statJudge"] } },
+        { "expect": { "Out": false } },
+        { "expect": { "Out": false } },
+        { "expect": { "Out": true, "Target": true, "alm": ["uncmdOn"] } },
+        { "in": { "Local": false }, "expect": { "MODE": 0, "Out": true, "State": 1 } },
+        { "in": { "Local": true }, "expect": { "MODE": 256 } },
+        { "in": { "Intlk": true }, "expect": { "Target": false, "Out": false, "State": 2 } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 2 } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 2 } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 2 } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 2 } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 2 } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 2 } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 2 } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false, "State": 2 } },
+        { "in": { "FbOn": false }, "expect": { "State": 0, "alm": ["uncmdOn"] } }
+      ]
+    },
+    {
+      "id": "DC-12", "title": "現場（弁）：現場で開けても合わせず、現場のあいだは失敗にしない。遠方に戻すと MonTOff で閉失敗", "req": ["6.1", "14-10"],
+      "config": "valve", "cfg": { "MonTOff": 1 },
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "Local": true, "dt": 0.25 }, "expect": { "State": 0 } },
+        { "in": { "FbOn": true, "FbOff": false }, "expect": { "State": 1, "diag": ["statJudge"] } },
+        { "expect": { "alm": ["uncmdOn"], "Out": false } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"], "Fault": false } },
+        { "in": { "Local": false }, "expect": { "alm": ["uncmdOn"], "Out": false } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn"] } },
+        { "expect": { "alm": ["uncmdOn", "offFail"], "Out": false } }
+      ]
+    },
+    {
+      "id": "DC-13", "title": "FaultAct 1：起動失敗で安全側へ。失敗のビットは安全側に動かしても消えず、次の指令で消える", "req": ["6.1", "14-7"],
+      "config": "pump", "cfg": { "FaultAct": 1, "MonTOn": 1 },
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Out": true } },
+        { "expect": { "Out": true } },
+        { "expect": { "Out": true } },
+        { "expect": { "alm": ["onFail"], "Target": false, "Out": false, "State": 0, "Travel": 0 } },
+        { "expect": { "alm": ["onFail"], "Out": false } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0 }, "expect": { "Result": 0, "alm": [] } }
+      ]
+    },
+    {
+      "id": "DC-14", "title": "要求の口：設定・運転時間・起動回数と、断る理由の番号", "req": ["9 章", "14-3", "14-4"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "AckSeq": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 10, "ReqValue": 600, "ReqWriter": 2 }, "expect": { "Result": 0, "cfg.MonTOn": 600 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0.75 }, "expect": { "Result": 12, "cfg.MonTOn": 600 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 11, "ReqValue": "NaN" }, "expect": { "Result": 8, "cfg.MonTOff": 2 } },
+        { "in": { "ReqSeq": 4, "ReqItem": 12, "ReqValue": 600.25 }, "expect": { "Result": 12, "cfg.StrokeT": 1 } },
+        { "in": { "ReqSeq": 5, "ReqValue": 0 }, "expect": { "Result": 0, "cfg.StrokeT": 0 } },
+        { "in": { "ReqSeq": 6, "ReqItem": 13, "ReqValue": 10 }, "expect": { "Result": 0, "cfg.StatT": 10 } },
+        { "in": { "ReqSeq": 7, "ReqValue": 10.25 }, "expect": { "Result": 12, "cfg.StatT": 10 } },
+        { "in": { "ReqSeq": 8, "ReqItem": 20, "ReqValue": 12840 }, "expect": { "Result": 0, "cfg.RunHours": 12840, "cfg.RunSecFrac": 0 } },
+        { "in": { "ReqSeq": 9, "ReqValue": 1.5 }, "expect": { "Result": 8, "cfg.RunHours": 12840 } },
+        { "in": { "ReqSeq": 10, "ReqItem": 21, "ReqValue": 9999999 }, "expect": { "Result": 0, "cfg.Starts": 9999999 } },
+        { "in": { "ReqSeq": 11, "ReqValue": 10000000 }, "expect": { "Result": 12, "cfg.Starts": 9999999 } },
+        { "in": { "ReqSeq": 12, "ReqValue": -1 }, "expect": { "Result": 12 } },
+        { "in": { "ReqSeq": 13, "ReqItem": 10, "ReqValue": 5, "ReqWriter": 1 }, "expect": { "Result": 2, "cfg.MonTOn": 600 } },
+        { "in": { "ReqSeq": 14, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 3 }, "expect": { "Result": 2, "Target": false } },
+        { "in": { "ReqSeq": 15, "ReqItem": 2, "ReqValue": 2, "ReqWriter": 1 }, "expect": { "Result": 8, "MODE": 0 } },
+        { "in": { "ReqSeq": 16, "ReqItem": 1, "ReqValue": 0.5 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 17, "ReqItem": 99 }, "expect": { "Result": 1 } },
+        { "in": { "ReqSeq": 18, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "MODE": 1 } }
+      ]
+    },
+    {
+      "id": "DC-15", "title": "運転時間は 1 時間で時間に繰り上がる（REAL の桁落ちを避ける）。起動回数は実際の位置で数える", "req": ["8 章", "14-14"],
+      "config": "pump", "cfg": { "RunHours": 5, "RunSecFrac": 3599.5 },
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "cfg.Starts": 0, "cfg.RunHours": 5 } },
+        { "in": { "FbOn": true, "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "State": 1, "cfg.Starts": 1, "cfg.RunSecFrac": 3599.75, "cfg.RunHours": 5 } },
+        { "expect": { "cfg.RunHours": 6, "cfg.RunSecFrac": 0 } },
+        { "expect": { "cfg.RunHours": 6, "cfg.RunSecFrac": 0.25, "cfg.Starts": 1 } }
+      ]
+    },
+    {
+      "id": "DC-16", "title": "設定異常：目標を安全側に、監視しない。戻ったら Init と同じ。範囲外でも計算できる値は設定異常にしない", "req": ["9 章", "14-16", "C-8"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "cfgErr": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Target": true } },
+        { "cfgSet": { "MonTOn": "NaN" }, "expect": { "cfgErr": true, "Target": false, "Out": false, "STS": 129, "diag": ["cfgErr"], "alm": [] } },
+        { "cfgSet": { "MonTOn": 2 }, "expect": { "cfgErr": false, "Target": false } },
+        { "cfgSet": { "FbCfg": 4 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "FbCfg": 1, "StatT": -1 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "StatT": 1 }, "expect": { "cfgErr": false } },
+        { "cfgSet": { "MonTOn": 0.5 }, "expect": { "cfgErr": false } }
+      ]
+    },
+    {
+      "id": "DC-17", "title": "dt が 1 s を超えたら打ち切り", "req": ["10 章"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "dtClamp": false } },
+        { "in": { "dt": 5, "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "dtClamp": true, "STS": 257, "Travel": 100, "State": 2, "diag": ["dtClamp", "moving"], "alm": [] } },
+        { "expect": { "alm": ["onFail"], "State": 0, "Travel": 0, "diag": ["dtClamp"] } }
+      ]
+    },
+    {
+      "id": "DC-18", "title": "アンサーバックなし（FbCfg 0）：位置は推定そのもの。StrokeT 0 ならすぐ着く", "req": ["5 章", "7 章"],
+      "config": "valve", "cfg": { "FbCfg": 0 },
+      "steps": [
+        { "in": { "Init": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0, "Travel": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Out": true, "State": 2, "Travel": 25, "Remain": 0.75 } },
+        { "expect": { "Travel": 50 } },
+        { "expect": { "Travel": 75 } },
+        { "expect": { "Travel": 100, "State": 1, "Remain": 0 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0 }, "expect": { "Travel": 75, "State": 2 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 12, "ReqValue": 0, "ReqWriter": 2 }, "expect": { "Result": 0, "Travel": 0, "State": 0, "alm": [] } }
+      ]
+    },
+    {
+      "id": "DC-19", "title": "途中で向きを変えると今の推定位置から戻る", "req": ["7 章", "DV-P1"],
+      "config": "valve",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Travel": 25 } },
+        { "in": { "FbOff": false }, "expect": { "Travel": 50, "Remain": 0.5 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0 }, "expect": { "Travel": 25, "Remain": 0.25, "Target": false, "State": 2 } },
+        { "in": { "FbOff": true }, "expect": { "Travel": 0, "Remain": 0, "State": 0 } }
+      ]
+    },
+    {
+      "id": "DC-21", "title": "弁（FbTrack なし）が開から指令なしで閉じた（空気が抜けた）→ 安全側なので目標を閉に合わせる。空気が戻っても開かない", "req": ["6 章 3", "6.1"],
+      "config": "valve",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Target": true } },
+        { "in": { "FbOff": false }, "expect": { "State": 2 } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "Out": true } },
+        { "in": { "FbOn": false }, "expect": { "State": 2, "Out": true, "diag": [], "alm": [] } },
+        { "in": { "FbOff": true }, "expect": { "State": 0, "Out": true, "diag": ["statJudge"] } },
+        { "expect": { "Out": false, "Target": false, "alm": ["uncmdOff"], "Fault": false, "diag": [] } },
+        { "expect": { "Out": false, "Target": false, "alm": ["uncmdOff"] } }
+      ]
+    },
+    {
+      "id": "DC-20", "title": "Init で動いていたポンプは止める（目標は安全側）。止まるのを監視する。Init のスキャンは起動回数に数えない", "req": ["10 章", "14-15"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false, "Out": false, "State": 2, "Travel": 75, "Remain": 0.75, "diag": ["moving"], "cfg.Starts": 0 } },
+        { "in": { "FbOn": false }, "expect": { "State": 0, "Travel": 0, "cfg.Starts": 0 } }
+      ]
+    },
+    {
+      "id": "DC-22", "title": "パーミッシブは安全側から出るときだけ見る。運転中に FALSE になっても止めず、同じ向きの指令も受ける", "req": ["4 章", "14-2", "14-3"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 0, "Target": true } },
+        { "in": { "FbOn": true }, "expect": { "State": 1 } },
+        { "in": { "Perm": false }, "expect": { "Target": true, "Out": true } },
+        { "in": { "ReqSeq": 2 }, "expect": { "Result": 0, "Target": true } },
+        { "in": { "ReqSeq": 3, "ReqValue": 0 }, "expect": { "Result": 0, "Target": false } },
+        { "in": { "ReqSeq": 4, "ReqValue": 1 }, "expect": { "Result": 14, "Target": false } }
+      ]
+    },
+    {
+      "id": "DC-23", "title": "運転時間（時間）を書くと 1 時間未満の秒は 0 になる", "req": ["14-4"],
+      "config": "pump", "cfg": { "RunHours": 3, "RunSecFrac": 100 },
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "cfg.RunSecFrac": 100, "cfg.RunHours": 3 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 20, "ReqValue": 7, "ReqWriter": 2 }, "expect": { "Result": 0, "cfg.RunHours": 7, "cfg.RunSecFrac": 0 } }
+      ]
+    },
+    {
+      "id": "DC-24", "title": "AUT でインターロック中のプログラムの起動指令は断る（DIAG bit3 はそのスキャンだけ）", "req": ["4 章", "14-5"],
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "Intlk": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 0, "MODE": 1 } },
+        { "in": { "PCmdOn": true }, "expect": { "Target": false, "Out": false, "diag": ["pcmdRej"], "DIAG": 8 } },
+        { "expect": { "Target": false, "diag": [] } }
+      ]
+    },
+    {
+      "id": "DC-25", "title": "Init はプログラムの指令の前の値を今の値にする（AUT のまま Init しても入れっぱなしの指令で動かない）", "req": ["14-15", "14-5"],
+      "note": "Init はモード（MAN/AUT）を変えない（14-15 に無い）",
+      "config": "pump",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Result": 0, "MODE": 1 } },
+        { "in": { "Init": true, "PCmdOn": true }, "expect": { "Target": false, "Out": false, "MODE": 1 } },
+        { "expect": { "Target": false } },
+        { "in": { "PCmdOn": false }, "expect": { "Target": false } },
+        { "in": { "PCmdOn": true }, "expect": { "Target": true } }
+      ]
+    },
+    {
+      "id": "DC-26", "title": "インターロックで目標が安全側に決まると、起動失敗は消える", "req": ["14-6", "14-7"],
+      "config": "pump", "cfg": { "MonTOn": 1 },
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Target": true, "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": ["onFail"] } },
+        { "in": { "Intlk": true }, "expect": { "Target": false, "alm": [], "Fault": false, "State": 0 } }
+      ]
+    },
+    {
+      "id": "DC-27", "title": "起動失敗のあと、遅れてアンサーが来たら（失敗した向きの端に着いた）失敗は消える", "req": ["14-7"],
+      "config": "pump", "cfg": { "MonTOn": 1 },
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Target": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Target": true } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": [] } },
+        { "expect": { "alm": ["onFail"], "State": 0 } },
+        { "in": { "FbOn": true }, "expect": { "alm": [], "Fault": false, "State": 1, "Target": true } }
+      ]
+    },
+    {
+      "id": "DC-28", "title": "指令外の動きの判断時間は、途中の位置を通ったら数え直す", "req": ["6.1", "14-8"],
+      "note": "弁の StatT 0.5 s = 2 スキャン。s3 で途中を通るので s4 は 1 スキャン目",
+      "config": "valve",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "FbOn": true, "FbOff": false }, "expect": { "State": 1, "diag": ["statJudge"], "alm": [] } },
+        { "in": { "FbOn": false }, "expect": { "State": 2, "diag": [], "alm": [] } },
+        { "in": { "FbOn": true }, "expect": { "State": 1, "diag": ["statJudge"], "alm": [] } },
+        { "expect": { "alm": ["uncmdOn"], "diag": [] } }
+      ]
+    },
+    {
+      "id": "DC-29", "title": "ストローク時間 2 s：進み具合は 1 スキャンに 12.5 %、残り時間は 残りの % × 2 / 100", "req": ["7 章", "14-11", "14-12"],
+      "config": "valve", "cfg": { "StrokeT": 2 },
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "Travel": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "Travel": 12.5, "Remain": 1.75, "State": 2 } },
+        { "in": { "FbOff": false }, "expect": { "Travel": 25, "Remain": 1.5 } }
+      ]
+    },
+    {
+      "id": "DC-30", "title": "動いている途中で開・閉が両方 ON → State は 3（位置不明が動作中より先）", "req": ["14-13", "5 章"],
+      "config": "valve",
+      "steps": [
+        { "in": { "Init": true, "FbOn": false, "FbOff": true, "Perm": true, "dt": 0.25, "ReqSeq": 0 }, "expect": { "State": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "State": 2 } },
+        { "in": { "FbOn": true }, "expect": { "State": 3, "alm": ["limFail"], "Fault": true } },
+        { "in": { "FbOff": false }, "expect": { "State": 1, "alm": [], "Fault": false } }
+      ]
+    }
+  ]
+}

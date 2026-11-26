@@ -1,0 +1,80 @@
+{
+  "block": "PB_Split",
+  "spec": "spec/blocks/PB_Split_基本版.md v0.2",
+  "note": "期待値は仕様書から手で起こした（NF-4）。Init・dt・要求の口を持たない。diag の名前：cfgErr・inNaN（In が数でない）・bkA・bkB（下流が戻り信号 FALSE）",
+  "tolerance": { "abs": 0.0001 },
+  "configs": {
+    "default": { "InLoA": 0, "InHiA": 50, "OutLoA": 0, "OutHiA": 100, "InLoB": 50, "InHiB": 100, "OutLoB": 0, "OutHiB": 100 },
+    "heatcool": { "InLoA": 0, "InHiA": 50, "OutLoA": 100, "OutHiA": 0, "InLoB": 50, "InHiB": 100, "OutLoB": 0, "OutHiB": 100 },
+    "gap": { "InLoA": 0, "InHiA": 45, "OutLoA": 0, "OutHiA": 100, "InLoB": 55, "InHiB": 100, "OutLoB": 0, "OutHiB": 100 }
+  },
+  "cases": [
+    {
+      "id": "SP-01", "title": "順に開く（小弁 0〜50 %・大弁 50〜100 %）。範囲の外は端で切る", "req": ["1 章", "2 章", "15-1"],
+      "config": "default",
+      "steps": [
+        { "in": { "In": 25, "BkOkA": true, "BkOkB": true }, "expect": { "OutA": 50, "OutB": 0, "BkOk": true, "BkVal": 25, "STS": 1, "MODE": 0, "ALM": 0, "DIAG": 0 } },
+        { "in": { "In": 50 }, "expect": { "OutA": 100, "OutB": 0 } },
+        { "in": { "In": 75 }, "expect": { "OutA": 100, "OutB": 50, "BkVal": 75 } },
+        { "in": { "In": 100 }, "expect": { "OutA": 100, "OutB": 100 } },
+        { "in": { "In": 110 }, "expect": { "OutA": 100, "OutB": 100, "BkVal": 110 } },
+        { "in": { "In": -10 }, "expect": { "OutA": 0, "OutB": 0 } }
+      ]
+    },
+    {
+      "id": "SP-02", "title": "加熱と冷却（MV 50 % が中立。冷却弁は OutLo ＞ OutHi）", "req": ["1 章", "2 章"],
+      "config": "heatcool",
+      "steps": [
+        { "in": { "In": 50, "BkOkA": true, "BkOkB": true }, "expect": { "OutA": 0, "OutB": 0 } },
+        { "in": { "In": 25 }, "expect": { "OutA": 50, "OutB": 0 } },
+        { "in": { "In": 0 }, "expect": { "OutA": 100, "OutB": 0 } },
+        { "in": { "In": 60 }, "expect": { "OutA": 0, "OutB": 20 } }
+      ]
+    },
+    {
+      "id": "SP-03", "title": "両方閉の区間（A 0〜45 %・B 55〜100 %）", "req": ["1 章"],
+      "config": "gap",
+      "steps": [
+        { "in": { "In": 50, "BkOkA": true, "BkOkB": true }, "expect": { "OutA": 100, "OutB": 0 } },
+        { "in": { "In": 22.5 }, "expect": { "OutA": 50, "OutB": 0 } },
+        { "in": { "In": 77.5 }, "expect": { "OutA": 100, "OutB": 50 } }
+      ]
+    },
+    {
+      "id": "SP-04", "title": "戻り信号：どちらかが FALSE なら BkOk FALSE、BkVal は今の In（調節計をその場で止める）", "req": ["3 章", "13 章 論点 2"],
+      "config": "default",
+      "steps": [
+        { "in": { "In": 60, "BkOkA": true, "BkOkB": true }, "expect": { "BkOk": true, "BkVal": 60, "DIAG": 0 } },
+        { "in": { "BkOkA": false, "BkValA": 0 }, "expect": { "BkOk": false, "BkVal": 60, "OutA": 100, "OutB": 20, "diag": ["bkA"] } },
+        { "in": { "BkOkB": false }, "expect": { "BkOk": false, "diag": ["bkA", "bkB"], "STS": 1 } },
+        { "in": { "BkOkA": true }, "expect": { "BkOk": false, "diag": ["bkB"] } },
+        { "in": { "BkOkB": true }, "expect": { "BkOk": true, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "SP-05", "title": "In が数でない：出力を保持、BkVal は最後の数", "req": ["15-3"],
+      "config": "default",
+      "steps": [
+        { "in": { "In": 30, "BkOkA": true, "BkOkB": true }, "expect": { "OutA": 60, "OutB": 0 } },
+        { "in": { "In": "NaN" }, "expect": { "OutA": 60, "OutB": 0, "BkVal": 30, "BkOk": true, "diag": ["inNaN"] } },
+        { "in": { "In": "-Inf" }, "expect": { "OutA": 60, "BkVal": 30, "diag": ["inNaN"] } },
+        { "in": { "In": 40 }, "expect": { "OutA": 80, "BkVal": 40, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "SP-06", "title": "設定異常：出力を保持、BkOk FALSE、品質 Bad。直れば次のスキャンから計算", "req": ["4 章", "15-4"],
+      "config": "default",
+      "steps": [
+        { "in": { "In": 30, "BkOkA": true, "BkOkB": true }, "expect": { "OutA": 60 } },
+        { "cfgSet": { "InHiA": 0 }, "in": { "In": 35 }, "expect": { "OutA": 60, "OutB": 0, "BkOk": false, "BkVal": 35, "q": 2, "cause": 1, "cfgErr": true, "diag": ["cfgErr"] } },
+        { "cfgSet": { "InHiA": 50 }, "expect": { "OutA": 70, "BkOk": true, "cfgErr": false, "STS": 1 } },
+        { "cfgSet": { "OutHiB": 101 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "OutHiB": 100, "InLoB": -1 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "InLoB": "NaN" }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "InLoB": 50, "OutLoA": "Inf" }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "OutLoA": 0, "InLoB": 100 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "InLoB": 50 }, "expect": { "cfgErr": false, "OutA": 70 } }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "block": "PB_AnaOut",
+  "spec": "spec/blocks/PB_AnaOut_基本版.md v0.2",
+  "note": "期待値は仕様書から手で起こした（NF-4）。時間は 0.25 s の倍数。既定は Act 0・RawLo 0・RawHi 32000。alm の名前：devAlm（開度偏差）・aoFail（AO の異常）・posFail（開度信号の異常）。diag の名前：dtClamp・cfgErr・safe（安全側）・inNaN（In が数でない）・devPend（偏差の判定中）",
+  "tolerance": { "abs": 0.001 },
+  "configs": {
+    "default": { "Act": 0, "RawLo": 0, "RawHi": 32000, "SafePct": 0, "PosUse": false, "PosRawLo": 0, "PosRawHi": 32000, "DevLim": 10, "DevHys": 2, "DevT": 30, "ManPct": 0, "Mode": 1 },
+    "pos": { "Act": 0, "RawLo": 0, "RawHi": 32000, "SafePct": 0, "PosUse": true, "PosRawLo": 0, "PosRawHi": 32000, "DevLim": 10, "DevHys": 2, "DevT": 1, "ManPct": 0, "Mode": 1 }
+  },
+  "cases": [
+    {
+      "id": "AO-01", "title": "AUT：開度 → カウント・mA。0〜100 % で切る", "req": ["3 章", "4 章", "14-5"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 25 }, "expect": { "OutPct": 25, "Out": 8000, "mA": 8, "BkOk": true, "BkVal": 25, "STS": 1, "MODE": 1, "ALM": 0, "DIAG": 0, "Pos": 0, "Dev": 0 } },
+        { "in": { "In": 100 }, "expect": { "OutPct": 100, "Out": 32000, "mA": 20, "BkVal": 100 } },
+        { "in": { "In": 120 }, "expect": { "OutPct": 100, "Out": 32000, "mA": 20, "BkOk": true, "BkVal": 100 } },
+        { "in": { "In": -5 }, "expect": { "OutPct": 0, "Out": 0, "mA": 4, "BkVal": 0 } }
+      ]
+    },
+    {
+      "id": "AO-02", "title": "信号が増えると閉じる弁（Act 1）：信号は 100 − 開度。BkVal は開度のまま", "req": ["4 章"],
+      "config": "default", "cfg": { "Act": 1 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 25 }, "expect": { "OutPct": 25, "Out": 24000, "mA": 16, "BkVal": 25, "BkOk": true } },
+        { "in": { "In": 100 }, "expect": { "OutPct": 100, "Out": 0, "mA": 4 } }
+      ]
+    },
+    {
+      "id": "AO-03", "title": "4 mA が 0 カウントでない AO ユニット（RawLo 6400）", "req": ["4 章", "14-5"],
+      "config": "default", "cfg": { "RawLo": 6400 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 50 }, "expect": { "OutPct": 50, "Out": 19200, "mA": 12 } },
+        { "in": { "In": 0 }, "expect": { "Out": 6400, "mA": 4 } }
+      ]
+    },
+    {
+      "id": "AO-04", "title": "安全側：SafePct にする、BkOk FALSE、モードは変えない。戻ったら In に", "req": ["3 章", "5 章", "13 章 論点 3"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 40 }, "expect": { "OutPct": 40, "BkOk": true } },
+        { "in": { "Safe": true }, "expect": { "OutPct": 0, "Out": 0, "BkOk": false, "BkVal": 0, "MODE": 1, "manip": true, "q": 0, "diag": ["safe"], "ALM": 0 } },
+        { "in": { "In": 0 }, "expect": { "OutPct": 0, "BkOk": false } },
+        { "in": { "Safe": false }, "expect": { "OutPct": 0, "BkOk": true, "manip": false, "DIAG": 0, "MODE": 1 } },
+        { "in": { "In": 30 }, "expect": { "OutPct": 30 } },
+        { "cfgSet": { "SafePct": 100 }, "in": { "Safe": true }, "expect": { "OutPct": 100, "Out": 32000, "BkVal": 100, "BkOk": false } }
+      ]
+    },
+    {
+      "id": "AO-05", "title": "MAN：今の開度から始め、書いた開度を保持。AUT では項目 2 を断る", "req": ["3 章", "10 章", "14-2", "14-9"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 30 }, "expect": { "OutPct": 30, "cfg.ManPct": 30 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 0, "ReqWriter": 1 }, "expect": { "AckSeq": 1, "Result": 0, "MODE": 0, "cfg.Mode": 0, "OutPct": 30, "BkOk": false, "BkVal": 30, "manip": true } },
+        { "in": { "In": 55 }, "expect": { "OutPct": 30, "BkOk": false } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 60, "ReqWriter": 1 }, "expect": { "Result": 0, "OutPct": 60, "Out": 19200, "cfg.ManPct": 60 } },
+        { "in": { "ReqSeq": 3, "ReqValue": 101 }, "expect": { "Result": 3, "OutPct": 60 } },
+        { "in": { "ReqSeq": 4, "ReqValue": "NaN" }, "expect": { "Result": 8, "OutPct": 60 } },
+        { "in": { "ReqSeq": 5, "ReqItem": 1, "ReqValue": 1, "In": 60 }, "expect": { "Result": 0, "MODE": 1, "OutPct": 60, "BkOk": true, "manip": false } },
+        { "in": { "ReqSeq": 6, "ReqItem": 2, "ReqValue": 50 }, "expect": { "Result": 4, "OutPct": 60 } }
+      ]
+    },
+    {
+      "id": "AO-06", "title": "MAN のまま安全側：MAN の開度も SafePct に合わせる。戻っても SafePct のまま", "req": ["3 章", "14-2", "10 章"],
+      "config": "default", "cfg": { "Mode": 0, "ManPct": 60 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 10 }, "expect": { "OutPct": 60, "MODE": 0, "BkOk": false } },
+        { "in": { "Safe": true }, "expect": { "OutPct": 0, "cfg.ManPct": 0, "diag": ["safe"] } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 20, "ReqWriter": 1 }, "expect": { "Result": 4, "OutPct": 0 } },
+        { "in": { "Safe": false }, "expect": { "OutPct": 0, "MODE": 0, "DIAG": 0, "manip": true } },
+        { "in": { "ReqSeq": 2 }, "expect": { "Result": 0, "OutPct": 20, "cfg.ManPct": 20 } }
+      ]
+    },
+    {
+      "id": "AO-07", "title": "AO の異常：出力は変えず BkOk FALSE、品質 Bad（計器）、ALM bit1", "req": ["5 章", "14-10"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 40 }, "expect": { "OutPct": 40, "BkOk": true, "q": 0 } },
+        { "in": { "ChFault": true }, "expect": { "OutPct": 40, "Out": 12800, "BkOk": false, "BkVal": 40, "q": 2, "cause": 1, "alm": ["aoFail"], "ALM": 2 } },
+        { "in": { "ChFault": false }, "expect": { "BkOk": true, "q": 0, "alm": [], "STS": 1 } }
+      ]
+    },
+    {
+      "id": "AO-08", "title": "AUT で In が数でない：開度を保持、DIAG bit3、BkOk は TRUE のまま", "req": ["3 章", "14-4"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 40 }, "expect": { "OutPct": 40 } },
+        { "in": { "In": "NaN" }, "expect": { "OutPct": 40, "Out": 12800, "BkOk": true, "BkVal": 40, "diag": ["inNaN"] } },
+        { "in": { "In": "Inf" }, "expect": { "OutPct": 40, "diag": ["inNaN"] } },
+        { "in": { "In": 45 }, "expect": { "OutPct": 45, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "AO-09", "title": "電源投入：モードは保持（MAN なら MAN の開度で始める）。Init では要求の口を処理しない", "req": ["8 章", "13 章 論点 4"],
+      "config": "default", "cfg": { "Mode": 0, "ManPct": 35 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 70, "ReqSeq": 5, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 1 }, "expect": { "OutPct": 35, "MODE": 0, "BkOk": false, "AckSeq": 5, "Result": 0 } },
+        { "in": {}, "expect": { "OutPct": 35, "MODE": 0, "AckSeq": 5 } },
+        { "in": { "Init": true }, "expect": { "OutPct": 35, "MODE": 0 } }
+      ]
+    },
+    {
+      "id": "AO-10", "title": "開度の偏差：DevT 続いたら警報、短ければ数え直し、ヒステリシスで戻る", "req": ["6 章", "14-7"],
+      "config": "pos",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 50, "PosIn": 16000 }, "expect": { "OutPct": 50, "Pos": 50, "Dev": 0, "ALM": 0, "DIAG": 0 } },
+        { "in": { "PosIn": 12000 }, "expect": { "Pos": 37.5, "Dev": -12.5, "alm": [], "diag": ["devPend"] } },
+        { "in": {}, "expect": { "alm": [], "diag": ["devPend"] } },
+        { "in": { "PosIn": 16000 }, "expect": { "Dev": 0, "alm": [], "DIAG": 0 } },
+        { "in": { "PosIn": 12000 }, "expect": { "alm": [], "diag": ["devPend"] } },
+        { "in": {}, "expect": { "alm": [], "diag": ["devPend"] } },
+        { "in": {}, "expect": { "alm": [], "diag": ["devPend"] } },
+        { "in": {}, "expect": { "alm": ["devAlm"], "ALM": 1, "DIAG": 0, "q": 0, "BkOk": true } },
+        { "in": { "PosIn": 13120 }, "expect": { "Pos": 41, "Dev": -9, "alm": ["devAlm"], "DIAG": 0 } },
+        { "in": { "PosIn": 13800 }, "expect": { "Pos": 43.125, "Dev": -6.875, "alm": [] } }
+      ]
+    },
+    {
+      "id": "AO-11", "title": "開度信号の異常（PosFault・3.6 mA より下）：偏差を判定しない、Pos は保持、偏差の警報は消す", "req": ["6 章", "14-6"],
+      "config": "pos",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 50, "PosIn": 0 }, "expect": { "Pos": 0, "Dev": -50, "diag": ["devPend"] } },
+        { "in": {}, "expect": {} },
+        { "in": {}, "expect": {} },
+        { "in": {}, "expect": { "alm": ["devAlm"] } },
+        { "in": { "PosFault": true }, "expect": { "alm": ["posFail"], "ALM": 4, "Pos": 0, "Dev": 0, "DIAG": 0, "q": 0, "BkOk": true } },
+        { "in": { "PosFault": false, "PosIn": 16000 }, "expect": { "alm": [], "Pos": 50, "Dev": 0 } },
+        { "in": { "PosIn": -1000 }, "expect": { "alm": ["posFail"], "Pos": 50, "Dev": 0 } },
+        { "in": { "PosIn": -800 }, "expect": { "alm": [], "Pos": -2.5, "Dev": -52.5, "diag": ["devPend"] } },
+        { "in": { "PosIn": "NaN" }, "expect": { "alm": ["posFail"], "Pos": -2.5, "Dev": 0, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "AO-12", "title": "開度を使わない（PosUse FALSE）：PosIn・PosFault を見ない", "req": ["14-6"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 50, "PosIn": 0, "PosFault": true }, "expect": { "Pos": 0, "Dev": 0, "ALM": 0, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "AO-13", "title": "安全側・MAN でも偏差を見る（DevT 0 なら次のスキャンで警報）", "req": ["6 章", "14-7"],
+      "config": "pos", "cfg": { "DevT": 0 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 50, "PosIn": 16000 }, "expect": { "ALM": 0 } },
+        { "in": { "Safe": true }, "expect": { "OutPct": 0, "Dev": 50, "alm": ["devAlm"], "diag": ["safe"] } },
+        { "in": { "PosIn": 0 }, "expect": { "Dev": 0, "alm": [] } }
+      ]
+    },
+    {
+      "id": "AO-14", "title": "設定異常（RawLo = RawHi）：出力を保持、BkOk FALSE、品質 Bad。戻ったら Init と同じ", "req": ["7 章", "14-8"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 40 }, "expect": { "OutPct": 40, "Out": 12800 } },
+        { "cfgSet": { "RawHi": 0 }, "in": { "In": 60 }, "expect": { "OutPct": 40, "Out": 12800, "mA": 10.4, "BkOk": false, "BkVal": 40, "q": 2, "cause": 1, "cfgErr": true, "diag": ["cfgErr"], "ALM": 0, "MODE": 1 } },
+        { "cfgSet": { "RawHi": 32000 }, "in": {}, "expect": { "OutPct": 60, "Out": 19200, "BkOk": true, "q": 0, "cfgErr": false, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "AO-15", "title": "設定異常の種類：Act・Mode・SafePct・ManPct・DevLim・DevHys・DevT・PosUse で PosRawLo = PosRawHi", "req": ["7 章", "14-3"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 40 }, "expect": { "cfgErr": false } },
+        { "cfgSet": { "Act": 2 }, "expect": { "cfgErr": true, "BkOk": false } },
+        { "cfgSet": { "Act": 0, "Mode": 2 }, "expect": { "cfgErr": true, "MODE": 0 } },
+        { "cfgSet": { "Mode": 1, "SafePct": 100.5 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "SafePct": 0, "ManPct": "NaN" }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "ManPct": -1 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "ManPct": 0, "DevLim": 0.5 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "DevLim": 10, "DevHys": 11 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "DevHys": 2, "DevT": 601 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "DevT": 30, "PosRawHi": 0 }, "expect": { "cfgErr": false, "BkOk": true } },
+        { "cfgSet": { "PosUse": true }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "PosRawHi": 32000 }, "expect": { "cfgErr": false, "OutPct": 40 } }
+      ]
+    },
+    {
+      "id": "AO-16", "title": "要求の口の断る順番と、偏差の設定（項目 10〜12）", "req": ["10 章", "14-9"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 40 }, "expect": {} },
+        { "in": { "ReqSeq": 1, "ReqItem": 3, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "AckSeq": 1, "Result": 1 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 10, "ReqValue": 20, "ReqWriter": 1 }, "expect": { "Result": 2 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 1, "ReqValue": 0, "ReqWriter": 3 }, "expect": { "Result": 2, "MODE": 1 } },
+        { "in": { "ReqSeq": 4, "ReqItem": 1, "ReqValue": 2, "ReqWriter": 1 }, "expect": { "Result": 8, "MODE": 1 } },
+        { "in": { "ReqSeq": 5, "ReqItem": 10, "ReqValue": 60, "ReqWriter": 2 }, "expect": { "Result": 12, "cfg.DevLim": 10 } },
+        { "in": { "ReqSeq": 6, "ReqValue": 1 }, "expect": { "Result": 13, "cfg.DevLim": 10 } },
+        { "in": { "ReqSeq": 7, "ReqValue": 20 }, "expect": { "Result": 0, "cfg.DevLim": 20 } },
+        { "in": { "ReqSeq": 8, "ReqItem": 11, "ReqValue": 25 }, "expect": { "Result": 13, "cfg.DevHys": 2 } },
+        { "in": { "ReqSeq": 9, "ReqValue": -1 }, "expect": { "Result": 12 } },
+        { "in": { "ReqSeq": 10, "ReqValue": 5 }, "expect": { "Result": 0, "cfg.DevHys": 5 } },
+        { "in": { "ReqSeq": 11, "ReqItem": 12, "ReqValue": 601 }, "expect": { "Result": 12, "cfg.DevT": 30 } },
+        { "in": { "ReqSeq": 12, "ReqValue": 60 }, "expect": { "Result": 0, "cfg.DevT": 60 } },
+        { "in": { "ReqSeq": 13, "ReqValue": "Inf" }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 14, "ReqItem": 1, "ReqValue": 0, "ReqWriter": 2, "Safe": true }, "expect": { "Result": 0, "MODE": 0, "OutPct": 0 } }
+      ]
+    },
+    {
+      "id": "AO-17", "title": "dt の打ち切り（1.0 s 超）と、dt ≦ 0 は時間を進めない", "req": ["8 章"],
+      "config": "pos", "cfg": { "DevT": 1 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 50, "PosIn": 0 }, "expect": { "diag": ["devPend"] } },
+        { "in": { "dt": 0 }, "expect": { "alm": [], "diag": ["devPend"] } },
+        { "in": { "dt": -1 }, "expect": { "alm": [], "diag": ["devPend"] } },
+        { "in": { "dt": 2 }, "expect": { "alm": ["devAlm"], "dtClamp": true, "diag": ["dtClamp"] } }
+      ]
+    }
+  ]
+}

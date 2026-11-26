@@ -1,0 +1,411 @@
+{
+  "block": "PB_AnaMon",
+  "spec": "spec/blocks/PB_AnaMon_基本版.md v0.6・拡張_警報の抑制と代替値.md v0.2",
+  "note": "期待値は仕様書から手で起こした（NF-4）。境界の試験は 2 進数でちょうど表せる値で組んだ（仕様書 13.1）。configs.exact では PV = In / 256、mA = 4 + In / 2048。AM-27〜 は抑制と代替値（configs.supp：PV = In / 320、HH 90・H 80・L 20・LL 10）。diag の supp は抑制中",
+  "tolerance": { "abs": 0.0001 },
+  "configs": {
+    "supp": {
+      "InType": 0, "RawLo": 0, "RawHi": 32000, "EuLo": 0, "EuHi": 100, "FilterT": 0,
+      "LimHH": 90, "LimH": 80, "LimL": 20, "LimLL": 10, "Hys": 0, "Inh": 0,
+      "FailMode": 0, "FailLo": 3.6, "OorLo": 3.8, "OorHi": 20.5, "FailHi": 21.0, "SimValue": 0, "FailDelay": 0,
+      "SuppMask": 15, "SuppOffT": 0, "SubOn": false, "SubValue": 0
+    },
+    "default": {
+      "InType": 0, "RawLo": 0, "RawHi": 32000, "EuLo": 0, "EuHi": 100, "FilterT": 0,
+      "LimHH": 100, "LimH": 100, "LimL": 0, "LimLL": 0, "Hys": 0, "Inh": 15,
+      "FailMode": 0, "FailLo": 3.6, "OorLo": 3.8, "OorHi": 20.5, "FailHi": 21.0, "SimValue": 0, "FailDelay": 0
+    },
+    "exact": {
+      "InType": 0, "RawLo": 0, "RawHi": 32768, "EuLo": 0, "EuHi": 128, "FilterT": 0,
+      "LimHH": 112, "LimH": 96, "LimL": 32, "LimLL": 16, "Hys": 2, "Inh": 0,
+      "FailMode": 0, "FailLo": 3.5, "OorLo": 3.75, "OorHi": 20.5, "FailHi": 21.0, "SimValue": 0, "FailDelay": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "AM-01", "title": "スケーリング（既定の設定）とレンジ外の品質", "req": ["AI-2", "AI-3", "処理 2・4", "3 章"],
+      "config": "default",
+      "steps": [
+        { "in": { "Init": true, "In": 16000, "dt": 0.1 }, "expect": { "PV": 50, "mA": 12, "q": 0, "alm": [], "STS": 1 } },
+        { "in": { "In": 0 }, "expect": { "PV": 0, "mA": 4, "q": 0 } },
+        { "in": { "In": 32000 }, "expect": { "PV": 100, "mA": 20, "q": 0 } },
+        { "in": { "In": 8000 }, "expect": { "PV": 25, "mA": 8, "q": 0 } },
+        { "in": { "In": -400 }, "expect": { "PV": -1.25, "mA": 3.8, "q": 1, "cause": 0, "alm": [], "Bad": false } },
+        { "in": { "In": 33000 }, "expect": { "PV": 103.125, "mA": 20.5, "q": 1, "cause": 0 } }
+      ]
+    },
+    {
+      "id": "AM-02", "title": "オフセットのある生値の範囲と工学値のレンジ。0 mA で計器故障、PV は保持", "req": ["AI-2", "AI-3", "AI-7"],
+      "config": "default", "cfg": { "RawLo": 6400, "RawHi": 32000, "EuLo": -50, "EuHi": 150 },
+      "steps": [
+        { "in": { "Init": true, "In": 6400, "dt": 0.1 }, "expect": { "PV": -50, "mA": 4, "q": 0 } },
+        { "in": { "In": 19200 }, "expect": { "PV": 50, "mA": 12, "q": 0 } },
+        { "in": { "In": 32000 }, "expect": { "PV": 150, "mA": 20, "q": 0 } },
+        { "in": { "In": 0 }, "expect": { "PV": 150, "mA": 0, "q": 2, "cause": 1, "alm": ["Fail"], "diag": ["ne43Lo"], "Bad": true } }
+      ]
+    },
+    {
+      "id": "AM-03", "title": "H・HH の発生（設定値ちょうど）と戻り（ヒステリシス）", "req": ["A-1", "A-2", "4 章"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25 }, "expect": { "PV": 64, "alm": [] } },
+        { "in": { "In": 24575 }, "expect": { "PV": 95.99609375, "alm": [] } },
+        { "in": { "In": 24576 }, "expect": { "PV": 96, "mA": 16, "alm": ["H"], "ALM": 2 } },
+        { "in": { "In": 24064 }, "expect": { "PV": 94, "alm": ["H"] } },
+        { "in": { "In": 24063 }, "expect": { "PV": 93.99609375, "alm": [] } },
+        { "in": { "In": 28671 }, "expect": { "PV": 111.99609375, "alm": ["H"] } },
+        { "in": { "In": 28672 }, "expect": { "PV": 112, "alm": ["HH", "H"], "ALM": 3 } },
+        { "in": { "In": 28160 }, "expect": { "PV": 110, "alm": ["HH", "H"] } },
+        { "in": { "In": 28159 }, "expect": { "PV": 109.99609375, "alm": ["H"] } }
+      ]
+    },
+    {
+      "id": "AM-04", "title": "L・LL の発生（設定値ちょうど）と戻り（ヒステリシス）", "req": ["A-1", "A-2", "4 章"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25 }, "expect": { "PV": 64, "alm": [] } },
+        { "in": { "In": 8193 }, "expect": { "PV": 32.00390625, "alm": [] } },
+        { "in": { "In": 8192 }, "expect": { "PV": 32, "alm": ["L"] } },
+        { "in": { "In": 8704 }, "expect": { "PV": 34, "alm": ["L"] } },
+        { "in": { "In": 8705 }, "expect": { "PV": 34.00390625, "alm": [] } },
+        { "in": { "In": 4097 }, "expect": { "PV": 16.00390625, "alm": ["L"] } },
+        { "in": { "In": 4096 }, "expect": { "PV": 16, "alm": ["L", "LL"], "ALM": 12 } },
+        { "in": { "In": 4608 }, "expect": { "PV": 18, "alm": ["L", "LL"] } },
+        { "in": { "In": 4609 }, "expect": { "PV": 18.00390625, "alm": ["L"] } }
+      ]
+    },
+    {
+      "id": "AM-05", "title": "警報の有効・無効（要求の口）。発生中に無効にするとその場で消える", "req": ["A-4", "D-7", "9 章", "13-12"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 24576, "dt": 0.25, "ReqSeq": 0, "ReqItem": 0, "ReqValue": 0, "ReqWriter": 0 }, "expect": { "alm": ["H"], "AckSeq": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 17, "ReqValue": 0, "ReqWriter": 2 }, "expect": { "AckSeq": 1, "Result": 0, "alm": [], "cfg.Inh": 2 } },
+        { "in": {}, "expect": { "alm": [], "AckSeq": 1 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 17, "ReqValue": 1 }, "expect": { "AckSeq": 2, "Result": 0, "alm": ["H"], "cfg.Inh": 0 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 17, "ReqValue": 2 }, "expect": { "AckSeq": 3, "Result": 8, "cfg.Inh": 0 } },
+        { "in": { "ReqSeq": 4, "ReqItem": 17, "ReqValue": 0, "ReqWriter": 1 }, "expect": { "AckSeq": 4, "Result": 2, "cfg.Inh": 0, "alm": ["H"] } }
+      ]
+    },
+    {
+      "id": "AM-06", "title": "計器故障・低い側（判定点ちょうど）。戻り点まで故障のまま、戻ったら判定し直す", "req": ["AI-3", "AI-7", "AI-8", "3 章", "13-3", "13-5", "13-7", "13-18"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25 }, "expect": { "PV": 64, "q": 0 } },
+        { "in": { "In": -1023 }, "expect": { "mA": 3.50048828125, "PV": -3.99609375, "q": 1, "cause": 0, "alm": ["L", "LL"], "diag": [], "STS": 9, "ALM": 12 } },
+        { "in": { "In": -1024 }, "expect": { "mA": 3.5, "PV": -3.99609375, "q": 2, "cause": 1, "alm": ["Fail"], "diag": ["ne43Lo"], "Bad": true, "STS": 49, "ALM": 16, "DIAG": 8 } },
+        { "in": { "In": -768 }, "expect": { "mA": 3.625, "PV": -3.99609375, "q": 2, "alm": ["Fail"], "diag": ["ne43Lo"] } },
+        { "in": { "In": -513 }, "expect": { "mA": 3.74951171875, "PV": -3.99609375, "q": 2, "alm": ["Fail"] } },
+        { "in": { "In": -512 }, "expect": { "mA": 3.75, "PV": -2, "q": 1, "cause": 0, "alm": ["L", "LL"], "diag": [], "Bad": false } }
+      ]
+    },
+    {
+      "id": "AM-07", "title": "計器故障・高い側（判定点ちょうど）。レンジ外でも警報は判定する", "req": ["AI-3", "3 章", "4 章", "13-5"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25 }, "expect": { "PV": 64 } },
+        { "in": { "In": 34815 }, "expect": { "mA": 20.99951171875, "PV": 135.99609375, "q": 1, "cause": 0, "alm": ["HH", "H"] } },
+        { "in": { "In": 34816 }, "expect": { "mA": 21, "PV": 135.99609375, "q": 2, "cause": 1, "alm": ["Fail"], "diag": ["ne43Hi"], "DIAG": 16 } },
+        { "in": { "In": 33793 }, "expect": { "mA": 20.50048828125, "PV": 135.99609375, "q": 2, "alm": ["Fail"] } },
+        { "in": { "In": 33792 }, "expect": { "mA": 20.5, "PV": 132, "q": 1, "alm": ["HH", "H"], "diag": [] } }
+      ]
+    },
+    {
+      "id": "AM-08", "title": "ユニットの異常ビット（ChFault）で計器故障", "req": ["AI-1", "3 章"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25, "ChFault": false }, "expect": { "PV": 64, "q": 0 } },
+        { "in": { "ChFault": true }, "expect": { "PV": 64, "q": 2, "cause": 1, "alm": ["Fail"], "diag": ["chFault"], "STS": 49, "ALM": 16, "DIAG": 4 } },
+        { "in": { "In": 20480 }, "expect": { "PV": 64, "mA": 14, "q": 2 } },
+        { "in": { "ChFault": false }, "expect": { "PV": 80, "q": 0, "alm": [], "diag": [] } }
+      ]
+    },
+    {
+      "id": "AM-09", "title": "FailMode = 1：計器故障中も計算値をそのまま出す", "req": ["AI-7", "処理 6", "13-4"],
+      "config": "exact", "cfg": { "FailMode": 1 },
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25 }, "expect": { "PV": 64 } },
+        { "in": { "In": -2048 }, "expect": { "mA": 3, "PV": -8, "q": 2, "alm": ["Fail"] } },
+        { "in": { "In": -4096 }, "expect": { "mA": 2, "PV": -16, "q": 2, "alm": ["Fail"] } },
+        { "in": { "In": 16384 }, "expect": { "mA": 12, "PV": 64, "q": 0, "alm": [] } }
+      ]
+    },
+    {
+      "id": "AM-10", "title": "故障の ON 遅延：遅延中は PV と警報を保持、途中で戻れば数え直し", "req": ["3 章 FailDelay", "13-2", "13-6", "13-18"],
+      "config": "exact", "cfg": { "FailDelay": 1.0 },
+      "steps": [
+        { "in": { "Init": true, "In": 25600, "dt": 0.25 }, "expect": { "PV": 100, "q": 0, "alm": ["H"] } },
+        { "in": { "In": -8192 }, "expect": { "mA": 0, "PV": 100, "q": 1, "cause": 1, "alm": ["H"], "diag": ["ne43Lo", "failPending"], "Bad": false, "STS": 41, "ALM": 2, "DIAG": 40 } },
+        { "in": {}, "expect": { "PV": 100, "q": 1, "alm": ["H"], "diag": ["ne43Lo", "failPending"] } },
+        { "in": {}, "expect": { "PV": 100, "q": 1, "alm": ["H"] } },
+        { "in": {}, "expect": { "PV": 100, "q": 2, "cause": 1, "alm": ["Fail"], "diag": ["ne43Lo"], "Bad": true } },
+        { "in": { "In": 25600 }, "expect": { "PV": 100, "q": 0, "alm": ["H"], "diag": [] } },
+        { "in": { "In": -8192 }, "expect": { "q": 1, "diag": ["ne43Lo", "failPending"] } },
+        { "in": {}, "expect": { "q": 1, "diag": ["ne43Lo", "failPending"] } },
+        { "in": { "In": 25600 }, "expect": { "PV": 100, "q": 0, "alm": ["H"], "diag": [] } },
+        { "in": { "In": -8192 }, "expect": { "q": 1, "alm": ["H"], "diag": ["ne43Lo", "failPending"] } },
+        { "in": {}, "expect": { "q": 1 } },
+        { "in": {}, "expect": { "q": 1 } },
+        { "in": {}, "expect": { "q": 2, "alm": ["Fail"] } }
+      ]
+    },
+    {
+      "id": "AM-11", "title": "InType = 1（4〜20 mA でない入力）：NE43 の判定をせず、レンジ外は Uncertain", "req": ["3 章 InType", "13-11"],
+      "config": "default", "cfg": { "InType": 1, "RawLo": 0, "RawHi": 1000, "EuLo": 0, "EuHi": 200 },
+      "steps": [
+        { "in": { "Init": true, "In": 500, "dt": 0.1, "ChFault": false }, "expect": { "PV": 100, "mA": 0, "q": 0 } },
+        { "in": { "In": -100 }, "expect": { "PV": -20, "mA": 0, "q": 1, "cause": 0, "alm": [] } },
+        { "in": { "In": 1100 }, "expect": { "PV": 220, "q": 1, "cause": 0 } },
+        { "in": { "ChFault": true }, "expect": { "PV": 220, "q": 2, "cause": 1, "alm": ["Fail"], "diag": ["chFault"] } }
+      ]
+    },
+    {
+      "id": "AM-12", "title": "フィルタ（一次遅れ）。dt ≦ 0 では進まない", "req": ["AI-4", "処理 5", "C-3", "7 章"],
+      "config": "exact", "cfg": { "FilterT": 0.75, "Inh": 15 },
+      "steps": [
+        { "in": { "Init": true, "In": 0, "dt": 0.25 }, "expect": { "PV": 0 } },
+        { "in": { "In": 32768 }, "expect": { "PV": 32, "mA": 20 } },
+        { "in": {}, "expect": { "PV": 56 } },
+        { "in": {}, "expect": { "PV": 74 } },
+        { "in": {}, "expect": { "PV": 87.5 } },
+        { "in": { "dt": 0 }, "expect": { "PV": 87.5, "dtClamp": false } },
+        { "in": { "dt": -1 }, "expect": { "PV": 87.5 } }
+      ]
+    },
+    {
+      "id": "AM-13", "title": "dt が 1 s を超えたら 1 s で打ち切り、そのスキャンだけ印を立てる", "req": ["C-3", "7 章"],
+      "config": "exact", "cfg": { "FilterT": 1.0, "Inh": 15 },
+      "steps": [
+        { "in": { "Init": true, "In": 0, "dt": 0.25 }, "expect": { "PV": 0, "dtClamp": false } },
+        { "in": { "In": 32768, "dt": 5 }, "expect": { "PV": 64, "dtClamp": true, "diag": ["dtClamp"], "STS": 257, "DIAG": 1 } },
+        { "in": { "dt": 0.25 }, "expect": { "PV": 76.8, "dtClamp": false, "diag": [] } }
+      ]
+    },
+    {
+      "id": "AM-14", "title": "停止中：PV 保持、警報も故障判定もしない。停止はエンジニアだけ。戻すと Init と同じ", "req": ["M-1", "M-4", "9 章 項目 1", "13-9", "13-16"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 25600, "dt": 0.25, "ReqSeq": 0, "ReqItem": 0, "ReqValue": 0, "ReqWriter": 0 }, "expect": { "PV": 100, "alm": ["H"], "oos": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "AckSeq": 1, "PV": 100, "q": 3, "oos": true, "alm": [], "Bad": true, "STS": 26, "ALM": 0 } },
+        { "in": { "In": 30000 }, "expect": { "PV": 100, "q": 3, "alm": [] } },
+        { "in": { "In": -8192 }, "expect": { "PV": 100, "mA": 0, "q": 3, "alm": [], "diag": [] } },
+        { "in": { "ReqSeq": 2, "ReqItem": 1, "ReqValue": 0, "ReqWriter": 1 }, "expect": { "Result": 2, "q": 3 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 1, "ReqValue": 2, "ReqWriter": 2 }, "expect": { "Result": 8, "q": 3 } },
+        { "in": { "In": 30000, "ReqSeq": 4, "ReqItem": 1, "ReqValue": 0, "ReqWriter": 2 }, "expect": { "Result": 0, "PV": 117.1875, "q": 0, "oos": false, "alm": ["HH", "H"], "Bad": false } }
+      ]
+    },
+    {
+      "id": "AM-15", "title": "模擬：模擬値で警報を判定、故障判定はしない。停止が優先。切ると Init と同じ", "req": ["AI-9", "M-3", "13-8", "13-9", "13-16"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25, "ChFault": false, "ReqSeq": 0, "ReqItem": 0, "ReqValue": 0, "ReqWriter": 0 }, "expect": { "PV": 64, "sim": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 3, "ReqValue": 100, "ReqWriter": 2 }, "expect": { "Result": 0, "cfg.SimValue": 100, "PV": 64, "sim": false } },
+        { "in": { "ReqSeq": 2, "ReqItem": 2, "ReqValue": 1 }, "expect": { "Result": 0, "PV": 100, "mA": 12, "q": 0, "sim": true, "manip": true, "alm": ["H"], "STS": 69, "ALM": 2 } },
+        { "in": { "ChFault": true }, "expect": { "PV": 100, "alm": ["H"], "diag": [], "q": 0 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 3, "ReqValue": 112 }, "expect": { "Result": 0, "PV": 112, "alm": ["HH", "H"] } },
+        { "in": { "ReqSeq": 4, "ReqItem": 1, "ReqValue": 1 }, "expect": { "Result": 0, "PV": 112, "q": 3, "oos": true, "sim": true, "manip": false, "alm": [] } },
+        { "in": { "ReqSeq": 5, "ReqItem": 1, "ReqValue": 0 }, "expect": { "Result": 0, "PV": 112, "q": 0, "sim": true, "manip": true, "alm": ["HH", "H"], "diag": [] } },
+        { "in": { "ChFault": false, "ReqSeq": 6, "ReqItem": 2, "ReqValue": 0 }, "expect": { "Result": 0, "PV": 64, "q": 0, "sim": false, "manip": false, "alm": [] } }
+      ]
+    },
+    {
+      "id": "AM-16", "title": "要求の口の検査と結果の番号。同じ番号は処理しない。レンジの変更", "req": ["D-7", "H-6", "H-7", "6 章", "13-12", "13-13", "13-14"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25, "ReqSeq": 0, "ReqItem": 0, "ReqValue": 0, "ReqWriter": 0 }, "expect": { "AckSeq": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 11, "ReqValue": 120, "ReqWriter": 2 }, "expect": { "AckSeq": 1, "Result": 13, "cfg.LimH": 96 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 11, "ReqValue": 130 }, "expect": { "Result": 3, "cfg.LimH": 96 } },
+        { "in": { "ReqSeq": 3, "ReqItem": 11, "ReqValue": 100 }, "expect": { "Result": 0, "cfg.LimH": 100 } },
+        { "in": { "ReqSeq": 4, "ReqItem": 14, "ReqValue": 13 }, "expect": { "Result": 12, "cfg.Hys": 2 } },
+        { "in": { "ReqSeq": 5, "ReqItem": 14, "ReqValue": 12.5 }, "expect": { "Result": 0, "cfg.Hys": 12.5 } },
+        { "in": { "ReqSeq": 6, "ReqItem": 15, "ReqValue": -1 }, "expect": { "Result": 12, "cfg.FilterT": 0 } },
+        { "in": { "ReqSeq": 7, "ReqItem": 15, "ReqValue": 3600 }, "expect": { "Result": 0, "cfg.FilterT": 3600 } },
+        { "in": { "ReqSeq": 8, "ReqItem": 99, "ReqValue": 1 }, "expect": { "Result": 1 } },
+        { "in": { "ReqSeq": 9, "ReqItem": 11, "ReqValue": 90, "ReqWriter": 3 }, "expect": { "Result": 2, "cfg.LimH": 100 } },
+        { "in": { "ReqSeq": 10, "ReqItem": 10, "ReqValue": "NaN", "ReqWriter": 2 }, "expect": { "AckSeq": 10, "Result": 8, "cfg.LimHH": 112 } },
+        { "in": { "ReqItem": 11, "ReqValue": 50 }, "expect": { "AckSeq": 10, "Result": 8, "cfg.LimH": 100 } },
+        { "in": { "ReqSeq": 11, "ReqItem": 21, "ReqValue": 100 }, "expect": { "Result": 13, "cfg.EuHi": 128 } },
+        { "in": { "ReqSeq": 12, "ReqItem": 16, "ReqValue": 0 }, "expect": { "Result": 0, "cfg.Inh": 1 } },
+        { "in": { "ReqSeq": 13, "ReqItem": 21, "ReqValue": 100 }, "expect": { "Result": 12, "cfg.EuHi": 128 } },
+        { "in": { "ReqSeq": 14, "ReqItem": 14, "ReqValue": 2 }, "expect": { "Result": 0, "cfg.Hys": 2 } },
+        { "in": { "ReqSeq": 15, "ReqItem": 21, "ReqValue": 100 }, "expect": { "Result": 0, "cfg.EuHi": 100 } },
+        { "in": { "ReqSeq": 16, "ReqItem": 20, "ReqValue": 100 }, "expect": { "Result": 13, "cfg.EuLo": 0 } }
+      ]
+    },
+    {
+      "id": "AM-17", "title": "設定異常（要求の口を通らずに入った値）。計算できない設定だけを異常にする", "req": ["C-8", "6 章", "13-17"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25 }, "expect": { "PV": 64, "cfgErr": false } },
+        { "cfgSet": { "RawHi": 0 }, "in": {}, "expect": { "PV": 64, "q": 2, "cause": 1, "cfgErr": true, "alm": [], "diag": ["cfgErr"], "Bad": true, "STS": 177, "DIAG": 2 } },
+        { "cfgSet": { "RawHi": 32768 }, "in": {}, "expect": { "PV": 64, "q": 0, "cfgErr": false, "diag": [] } },
+        { "cfgSet": { "EuHi": "NaN" }, "in": {}, "expect": { "PV": 64, "q": 2, "cfgErr": true } },
+        { "cfgSet": { "EuHi": 128 }, "in": { "In": 20480 }, "expect": { "PV": 80, "q": 0, "cfgErr": false } },
+        { "cfgSet": { "LimH": 200 }, "in": {}, "expect": { "PV": 80, "cfgErr": false, "alm": [] } },
+        { "cfgSet": { "FailLo": 3.9 }, "in": {}, "expect": { "PV": 80, "cfgErr": true } }
+      ]
+    },
+    {
+      "id": "AM-18", "title": "Init：入っていた古い要求は処理せず、番号だけ合わせる", "req": ["C-4", "7 章", "13-10"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25, "ReqSeq": 5, "ReqItem": 11, "ReqValue": 50, "ReqWriter": 2 }, "expect": { "AckSeq": 5, "cfg.LimH": 96, "alm": [] } },
+        { "in": {}, "expect": { "AckSeq": 5, "cfg.LimH": 96 } },
+        { "in": { "ReqSeq": 6 }, "expect": { "AckSeq": 6, "Result": 0, "cfg.LimH": 50, "alm": ["H"] } }
+      ]
+    },
+    {
+      "id": "AM-19", "title": "フィルタがあるとき、停止→運転はフィルタを今の値に合わせる（古い値から始めない）", "req": ["13-9", "処理 5"],
+      "note": "係数 dt /（FilterT + dt）= 0.25 / 1.0 = 0.25。Init と同じ扱いでなければ s4 は 32 + (64 − 32) × 0.25 = 40 になる",
+      "config": "exact", "cfg": { "FilterT": 0.75, "Inh": 15 },
+      "steps": [
+        { "in": { "Init": true, "In": 0, "dt": 0.25, "ReqSeq": 0, "ReqItem": 0, "ReqValue": 0, "ReqWriter": 0 }, "expect": { "PV": 0 } },
+        { "in": { "In": 32768 }, "expect": { "PV": 32 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "PV": 32, "q": 3 } },
+        { "in": { "In": 16384, "ReqSeq": 2, "ReqItem": 1, "ReqValue": 0 }, "expect": { "Result": 0, "PV": 64, "q": 0, "oos": false } },
+        { "in": { "In": 32768 }, "expect": { "PV": 80 } }
+      ]
+    },
+    {
+      "id": "AM-20", "title": "フィルタがあるとき、設定異常から戻ったスキャンはフィルタを今の値に合わせる", "req": ["13-19", "処理 5"],
+      "note": "Init と同じ扱いでなければ s3 は 0 + 128 × 0.25 = 32 になる",
+      "config": "exact", "cfg": { "FilterT": 0.75, "Inh": 15 },
+      "steps": [
+        { "in": { "Init": true, "In": 0, "dt": 0.25 }, "expect": { "PV": 0 } },
+        { "cfgSet": { "RawHi": 0 }, "in": { "In": 32768 }, "expect": { "PV": 0, "q": 2, "cfgErr": true } },
+        { "cfgSet": { "RawHi": 32768 }, "in": {}, "expect": { "PV": 128, "mA": 20, "q": 0, "cfgErr": false } }
+      ]
+    },
+    {
+      "id": "AM-21", "title": "フィルタがあるとき、故障の疑い・計器故障の間はフィルタを止め、戻ったら止めた値から続ける", "req": ["13-2", "13-6", "処理 5"],
+      "note": "In −8192 は 0 mA（PV' −32）。疑いの間にフィルタが進むと、戻ったスキャンの PV が 64 にならない",
+      "config": "exact", "cfg": { "FilterT": 0.75, "FailDelay": 1.0, "Inh": 15 },
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25 }, "expect": { "PV": 64 } },
+        { "in": { "In": -8192 }, "expect": { "PV": 64, "q": 1, "diag": ["ne43Lo", "failPending"] } },
+        { "in": {}, "expect": { "PV": 64, "q": 1 } },
+        { "in": {}, "expect": { "PV": 64, "q": 1 } },
+        { "in": {}, "expect": { "PV": 64, "q": 2, "alm": ["Fail"] } },
+        { "in": { "In": 16384 }, "expect": { "PV": 64, "q": 0, "alm": [], "diag": [] } }
+      ]
+    },
+    {
+      "id": "AM-22", "title": "警報設定値の大小の順番は有効な段どうしだけで見る", "req": ["6 章", "13-12", "13-20"],
+      "note": "HH（112）を無効にすれば、H を 120 にできる。有効な段どうしの順番（L 125 > H 120）は 13。無効の HH は 100（H より小さい）にもでき、有効に戻すときも順番は見ない",
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25, "ReqSeq": 0, "ReqItem": 0, "ReqValue": 0, "ReqWriter": 0 }, "expect": { "PV": 64, "alm": [] } },
+        { "in": { "ReqSeq": 1, "ReqItem": 16, "ReqValue": 0, "ReqWriter": 2 }, "expect": { "Result": 0, "cfg.Inh": 1 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 11, "ReqValue": 120 }, "expect": { "Result": 0, "cfg.LimH": 120, "alm": [] } },
+        { "in": { "ReqSeq": 3, "ReqItem": 12, "ReqValue": 125 }, "expect": { "Result": 13, "cfg.LimL": 32 } },
+        { "in": { "ReqSeq": 4, "ReqItem": 10, "ReqValue": 100 }, "expect": { "Result": 0, "cfg.LimHH": 100 } },
+        { "in": { "ReqSeq": 5, "ReqItem": 16, "ReqValue": 1 }, "expect": { "Result": 0, "cfg.Inh": 0, "alm": [] } }
+      ]
+    },
+    {
+      "id": "AM-23", "title": "入力 In が数でない（NaN・無限大）：計器故障、mA は 0、PV は FailMode に関係なく保持。模擬中は mA 0 で模擬値を使う", "req": ["13-21", "C-8", "13-8"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25 }, "expect": { "PV": 64, "q": 0 } },
+        { "in": { "In": "NaN" }, "expect": { "PV": 64, "mA": 0, "q": 2, "cause": 1, "alm": ["Fail"], "diag": ["chFault"], "Bad": true, "DIAG": 4 } },
+        { "in": { "In": 20480 }, "expect": { "PV": 80, "mA": 14, "q": 0, "alm": [], "diag": [] } },
+        { "in": { "In": "Inf" }, "expect": { "PV": 80, "mA": 0, "q": 2, "alm": ["Fail"], "diag": ["chFault"] } },
+        { "cfgSet": { "FailMode": 1 }, "in": { "In": "NaN" }, "expect": { "PV": 80, "mA": 0, "q": 2, "alm": ["Fail"] } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "PV": 0, "mA": 0, "q": 0, "sim": true, "alm": ["L", "LL"], "diag": [] } }
+      ]
+    },
+    {
+      "id": "AM-24", "title": "Init のときに In が数でない：PV を NaN にせず、ON 遅延のあと計器故障", "req": ["13-21", "13-6", "7 章"],
+      "note": "新しい FB の PV は 0。Init で警報を消してから遅延中は保持するので、PV 0 でも L・LL は出ない",
+      "config": "exact", "cfg": { "FailDelay": 0.5 },
+      "steps": [
+        { "in": { "Init": true, "In": "NaN", "dt": 0.25 }, "expect": { "PV": 0, "mA": 0, "q": 1, "cause": 1, "alm": [], "diag": ["chFault", "failPending"] } },
+        { "in": {}, "expect": { "PV": 0, "q": 2, "alm": ["Fail"], "diag": ["chFault"] } },
+        { "in": { "In": 16384 }, "expect": { "PV": 64, "q": 0, "alm": [], "diag": [] } }
+      ]
+    },
+    {
+      "id": "AM-25", "title": "停止→運転のときに In が数でない：PV は保持（0 にも NaN にもしない）、そのスキャンで計器故障", "req": ["13-21", "13-9", "13-16"],
+      "config": "exact",
+      "steps": [
+        { "in": { "Init": true, "In": 16384, "dt": 0.25, "ReqSeq": 0, "ReqItem": 0, "ReqValue": 0, "ReqWriter": 0 }, "expect": { "PV": 64 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "PV": 64, "q": 3 } },
+        { "in": { "In": "NaN" }, "expect": { "PV": 64, "mA": 0, "q": 3, "alm": [], "diag": [] } },
+        { "in": { "ReqSeq": 2, "ReqItem": 1, "ReqValue": 0 }, "expect": { "Result": 0, "PV": 64, "q": 2, "cause": 1, "alm": ["Fail"], "diag": ["chFault"] } }
+      ]
+    },
+    {
+      "id": "AM-26", "title": "InType = 1 で In が数でない：数に戻るまで計器故障のまま", "req": ["13-21", "3 章 InType"],
+      "config": "default", "cfg": { "InType": 1, "RawLo": 0, "RawHi": 1000, "EuLo": 0, "EuHi": 200 },
+      "steps": [
+        { "in": { "Init": true, "In": 500, "dt": 0.1, "ChFault": false }, "expect": { "PV": 100, "q": 0 } },
+        { "in": { "In": "NaN" }, "expect": { "PV": 100, "mA": 0, "q": 2, "alm": ["Fail"], "diag": ["chFault"] } },
+        { "in": {}, "expect": { "PV": 100, "q": 2, "alm": ["Fail"] } },
+        { "in": { "In": 600 }, "expect": { "PV": 120, "q": 0, "alm": [], "diag": [] } }
+      ]
+    },
+    {
+      "id": "AM-27", "title": "抑制：ALM から外し SUPALM に出す。HH などの BOOL は抑制の前のまま", "req": ["拡張 1 章", "8-3", "6 章 論点 5"],
+      "config": "supp",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 16000 }, "expect": { "PV": 50, "ALM": 0, "SUPALM": 0, "DIAG": 0 } },
+        { "in": { "In": 30400 }, "expect": { "PV": 95, "alm": ["HH", "H"], "SUPALM": 0, "HH": true } },
+        { "in": { "Supp": true }, "expect": { "ALM": 0, "SUPALM": 3, "HH": true, "H": true, "diag": ["supp"], "q": 0 } },
+        { "in": { "In": 16000 }, "expect": { "ALM": 0, "SUPALM": 0, "HH": false } },
+        { "in": { "In": 27200 }, "expect": { "PV": 85, "ALM": 0, "SUPALM": 2, "H": true, "HH": false } },
+        { "in": { "Supp": false }, "expect": { "alm": ["H"], "SUPALM": 0, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "AM-28", "title": "抑制をやめるのは SuppOffT の後。計器故障は SuppMask に無いので抑制しない", "req": ["8-2", "8-3"],
+      "config": "supp", "cfg": { "SuppOffT": 0.5 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 16000, "Supp": true }, "expect": { "diag": ["supp"] } },
+        { "in": { "In": 1600 }, "expect": { "PV": 5, "ALM": 0, "SUPALM": 12, "L": true, "LL": true } },
+        { "in": { "Supp": false }, "expect": { "ALM": 0, "SUPALM": 12, "diag": ["supp"] } },
+        { "in": {}, "expect": { "alm": ["L", "LL"], "SUPALM": 0, "DIAG": 0 } },
+        { "in": { "Supp": true, "In": -1000 }, "expect": { "alm": ["Fail"], "SUPALM": 0, "Fail": true, "diag": ["supp", "ne43Lo"] } }
+      ]
+    },
+    {
+      "id": "AM-29", "title": "代替値：PV = SubValue、警報は判定しない、計器故障は判定する、品質 Uncertain・Bad FALSE。切で今の値に戻る", "req": ["拡張 2 章", "8-5", "8-6", "8-8"],
+      "config": "supp",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 30400 }, "expect": { "PV": 95, "alm": ["HH", "H"] } },
+        { "in": { "ReqSeq": 1, "ReqItem": 5, "ReqValue": 40, "ReqWriter": 2 }, "expect": { "Result": 0, "cfg.SubValue": 40, "PV": 95 } },
+        { "in": { "ReqSeq": 2, "ReqItem": 4, "ReqValue": 1 }, "expect": { "Result": 0, "cfg.SubOn": true, "PV": 40, "ALM": 0, "HH": false, "q": 1, "cause": 1, "manip": true, "Bad": false } },
+        { "in": { "In": -1000 }, "expect": { "PV": 40, "Fail": true, "alm": ["Fail"], "q": 1, "Bad": false } },
+        { "in": { "In": 16000 }, "expect": { "PV": 40, "Fail": false, "ALM": 0 } },
+        { "in": { "ReqSeq": 3, "ReqValue": 0 }, "expect": { "Result": 0, "cfg.SubOn": false, "PV": 50, "q": 0, "manip": false } },
+        { "in": { "ReqSeq": 4, "ReqWriter": 1, "ReqValue": 1 }, "expect": { "Result": 2, "cfg.SubOn": false } },
+        { "in": { "ReqSeq": 5, "ReqWriter": 2, "ReqValue": 2 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 6, "ReqItem": 5, "ReqValue": "NaN" }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 7, "ReqValue": 101 }, "expect": { "Result": 3, "cfg.SubValue": 40 } }
+      ]
+    },
+    {
+      "id": "AM-30", "title": "代替値の入は保持（Init でも続く）。模擬は代替値より優先", "req": ["拡張 2 章", "8-4"],
+      "config": "supp", "cfg": { "SubOn": true, "SubValue": 30, "SimValue": 70 },
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 16000 }, "expect": { "PV": 30, "q": 1, "manip": true } },
+        { "in": { "ReqSeq": 1, "ReqItem": 2, "ReqValue": 1, "ReqWriter": 2 }, "expect": { "Result": 0, "PV": 70, "sim": true, "q": 0 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 0 }, "expect": { "PV": 30, "sim": false, "q": 1 } }
+      ]
+    },
+    {
+      "id": "AM-31", "title": "抑制・代替値の設定（項目 22・23）と設定異常", "req": ["8-7", "8-8"],
+      "config": "supp",
+      "steps": [
+        { "in": { "Init": true, "dt": 0.25, "In": 16000 }, "expect": { "cfgErr": false } },
+        { "in": { "ReqSeq": 1, "ReqItem": 22, "ReqValue": 31, "ReqWriter": 2 }, "expect": { "Result": 0, "cfg.SuppMask": 31 } },
+        { "in": { "ReqSeq": 2, "ReqValue": 32 }, "expect": { "Result": 12, "cfg.SuppMask": 31 } },
+        { "in": { "ReqSeq": 3, "ReqValue": 1.5 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 4, "ReqItem": 23, "ReqValue": 3601 }, "expect": { "Result": 12 } },
+        { "in": { "ReqSeq": 5, "ReqValue": 2 }, "expect": { "Result": 0, "cfg.SuppOffT": 2 } },
+        { "cfgSet": { "SuppMask": 32 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "SuppMask": 15, "SuppOffT": -1 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "SuppOffT": 0, "SubValue": "NaN" }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "SubValue": 0 }, "expect": { "cfgErr": false } }
+      ]
+    }
+  ]
+}

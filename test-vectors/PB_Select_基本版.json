@@ -1,0 +1,107 @@
+{
+  "block": "PB_Select",
+  "spec": "spec/blocks/PB_Select_基本版.md v0.3",
+  "note": "期待値は仕様書から手で起こした（NF-4）。Sel：0 高・1 低・2 中。Use は bit0〜2 ＝ 入力 1〜3。alm の名前：noSel（選べない）。diag の名前：cfgErr・in1・in2・in3（その入力が使えない）・bkDown（下流が戻り信号 FALSE）",
+  "tolerance": { "abs": 0.0001 },
+  "configs": {
+    "hi2": { "Sel": 0, "Use": 3, "Fix": 0 },
+    "lo3": { "Sel": 1, "Use": 7, "Fix": 0 },
+    "mid3": { "Sel": 2, "Use": 7, "Fix": 0 },
+    "lo2": { "Sel": 1, "Use": 3, "Fix": 0 }
+  },
+  "cases": [
+    {
+      "id": "SL-01", "title": "高選択（2 つ）。同じ値なら番号の小さい方", "req": ["2 章", "4 章"],
+      "config": "hi2",
+      "steps": [
+        { "in": { "Init": true, "In1": 50, "In2": 60, "In3": 999 }, "expect": { "Out": 60, "SelNo": 2, "Trk1": true, "Trk2": false, "Trk3": true, "TrkAll": false, "Bad": false, "STS": 1, "MODE": 0, "ALM": 0, "DIAG": 0 } },
+        { "in": { "In1": 55, "In2": 55 }, "expect": { "Out": 55, "SelNo": 1, "Trk1": false, "Trk2": true } },
+        { "in": { "In1": 70 }, "expect": { "Out": 70, "SelNo": 1 } }
+      ]
+    },
+    {
+      "id": "SL-02", "title": "低選択（3 つ）", "req": ["2 章"],
+      "config": "lo3",
+      "steps": [
+        { "in": { "Init": true, "In1": 30, "In2": 20, "In3": 40 }, "expect": { "Out": 20, "SelNo": 2, "Trk1": true, "Trk2": false, "Trk3": true, "q": 0 } },
+        { "in": { "In3": 10 }, "expect": { "Out": 10, "SelNo": 3, "Trk2": true, "Trk3": false } }
+      ]
+    },
+    {
+      "id": "SL-03", "title": "中選択：3 つは中央値、2 つは平均（SelNo 0・Trk 両方 FALSE）、1 つはそれ、0 なら選べない", "req": ["2 章", "13 章 論点 3", "15-2", "15-4", "15-6"],
+      "config": "mid3",
+      "steps": [
+        { "in": { "Init": true, "In1": 30, "In2": 20, "In3": 40 }, "expect": { "Out": 30, "SelNo": 1, "Trk1": false, "Trk2": true, "Trk3": true, "q": 0, "DIAG": 0 } },
+        { "in": { "Bad2": true }, "expect": { "Out": 35, "SelNo": 0, "Trk1": false, "Trk2": true, "Trk3": false, "Bad": false, "q": 1, "cause": 1, "diag": ["in2"] } },
+        { "in": { "Bad1": true }, "expect": { "Out": 40, "SelNo": 3, "Trk1": true, "Trk2": true, "Trk3": false, "q": 1, "diag": ["in1", "in2"] } },
+        { "in": { "Bad3": true, "In3": 45 }, "expect": { "Out": 40, "SelNo": 0, "Bad": true, "Trk1": true, "Trk2": true, "Trk3": true, "TrkAll": true, "alm": ["noSel"], "ALM": 1, "q": 2, "cause": 1, "diag": ["in1", "in2", "in3"] } },
+        { "in": { "Bad1": false, "Bad2": false, "Bad3": false, "In1": 30, "In2": 30, "In3": 40 }, "expect": { "Out": 30, "SelNo": 1, "Bad": false, "ALM": 0, "q": 0, "Trk1": false, "Trk2": true } }
+      ]
+    },
+    {
+      "id": "SL-04", "title": "Use に無い入力は見ない。数でない入力は使えない", "req": ["2 章", "15-7"],
+      "config": "hi2",
+      "steps": [
+        { "in": { "Init": true, "In1": 50, "In2": 60, "In3": 999, "Bad3": true }, "expect": { "Out": 60, "DIAG": 0, "q": 0 } },
+        { "in": { "In2": "NaN" }, "expect": { "Out": 50, "SelNo": 1, "Trk2": true, "q": 1, "diag": ["in2"] } },
+        { "in": { "In1": "Inf" }, "expect": { "Out": 50, "Bad": true, "SelNo": 0, "q": 2, "diag": ["in1", "in2"] } }
+      ]
+    },
+    {
+      "id": "SL-05", "title": "固定（項目 1、エンジニア）：その入力を出す。使えなくなっても自動に戻さず Bad", "req": ["3 章", "8 章", "13 章 論点 4", "15-8"],
+      "config": "lo2",
+      "steps": [
+        { "in": { "Init": true, "In1": 40, "In2": 70 }, "expect": { "Out": 40, "SelNo": 1, "MODE": 0 } },
+        { "in": { "ReqSeq": 1, "ReqItem": 1, "ReqValue": 2, "ReqWriter": 1 }, "expect": { "AckSeq": 1, "Result": 2, "MODE": 0 } },
+        { "in": { "ReqSeq": 2, "ReqWriter": 2, "ReqValue": 1.5 }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 3, "ReqValue": 4 }, "expect": { "Result": 3 } },
+        { "in": { "ReqSeq": 4, "ReqValue": 3 }, "expect": { "Result": 3, "cfg.Fix": 0 } },
+        { "in": { "ReqSeq": 5, "ReqValue": "NaN" }, "expect": { "Result": 8 } },
+        { "in": { "ReqSeq": 6, "ReqItem": 2, "ReqValue": 2 }, "expect": { "Result": 1 } },
+        { "in": { "ReqSeq": 7, "ReqItem": 1, "ReqValue": 2 }, "expect": { "Result": 0, "cfg.Fix": 2, "MODE": 1, "Out": 70, "SelNo": 2, "Trk1": true, "Trk2": false, "manip": true, "q": 0 } },
+        { "in": { "Bad2": true }, "expect": { "Out": 70, "Bad": true, "SelNo": 0, "Trk1": true, "Trk2": true, "alm": ["noSel"], "MODE": 1, "q": 2 } },
+        { "in": { "Bad2": false, "In2": 65 }, "expect": { "Out": 65, "Bad": false, "SelNo": 2 } },
+        { "in": { "ReqSeq": 8, "ReqValue": 0 }, "expect": { "Result": 0, "MODE": 0, "Out": 40, "SelNo": 1, "manip": false } }
+      ]
+    },
+    {
+      "id": "SL-06", "title": "オーバーライド：下流の BkOkIn が FALSE なら全部の調節計を追従（Trk すべて TRUE、Out = BkValIn）", "req": ["4 章", "15-5"],
+      "config": "lo2",
+      "steps": [
+        { "in": { "Init": true, "In1": 40, "In2": 70 }, "expect": { "Out": 40, "Trk1": false, "Trk2": true, "DIAG": 0 } },
+        { "in": { "BkOkIn": false, "BkValIn": 25 }, "expect": { "Out": 25, "TrkAll": true, "Trk1": true, "Trk2": true, "Trk3": true, "SelNo": 1, "Bad": false, "diag": ["bkDown"], "q": 0 } },
+        { "in": { "BkValIn": "NaN" }, "expect": { "Out": 25, "diag": ["bkDown"] } },
+        { "in": { "BkOkIn": true }, "expect": { "Out": 40, "TrkAll": false, "Trk1": false, "Trk2": true, "DIAG": 0 } }
+      ]
+    },
+    {
+      "id": "SL-07", "title": "設定異常：Out を保持、Bad、Trk すべて TRUE", "req": ["5 章", "15-4"],
+      "config": "lo2",
+      "steps": [
+        { "in": { "Init": true, "In1": 40, "In2": 70 }, "expect": { "Out": 40 } },
+        { "cfgSet": { "Sel": 3 }, "in": { "In1": 30 }, "expect": { "Out": 40, "Bad": true, "SelNo": 0, "Trk1": true, "Trk2": true, "Trk3": true, "cfgErr": true, "q": 2, "cause": 1, "diag": ["cfgErr"], "alm": ["noSel"] } },
+        { "cfgSet": { "Sel": 1 }, "expect": { "Out": 30, "Bad": false, "cfgErr": false } },
+        { "cfgSet": { "Use": 0 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "Use": 8 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "Use": 3, "Fix": 3 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "Fix": -1 }, "expect": { "cfgErr": true } },
+        { "cfgSet": { "Fix": 0 }, "expect": { "cfgErr": false, "Out": 30 } }
+      ]
+    },
+    {
+      "id": "SL-08", "title": "Init では要求の口を処理しない（番号だけ合わせる）", "req": ["6 章"],
+      "config": "lo2",
+      "steps": [
+        { "in": { "Init": true, "In1": 40, "In2": 70, "ReqSeq": 9, "ReqItem": 1, "ReqValue": 2, "ReqWriter": 2 }, "expect": { "AckSeq": 9, "Result": 0, "cfg.Fix": 0, "Out": 40 } }
+      ]
+    },
+    {
+      "id": "SL-09", "title": "Init のスキャンでは BkOkIn を見ない（下流をまだ呼んでいない）。次のスキャンから見る", "req": ["15-9", "15-10"],
+      "config": "lo2",
+      "steps": [
+        { "in": { "Init": true, "In1": 40, "In2": 70, "BkOkIn": false, "BkValIn": 10 }, "expect": { "Out": 40, "TrkAll": false, "SelNo": 1, "DIAG": 0 } },
+        { "in": {}, "expect": { "Out": 10, "TrkAll": true, "diag": ["bkDown"] } }
+      ]
+    }
+  ]
+}

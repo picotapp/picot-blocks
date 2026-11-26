@@ -1,0 +1,20 @@
+name: release
+# タグ（v0.1.0 など）を push すると、CHANGELOG.md のその版の節を本文にしてリリースを作る
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: リリースを作る
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" 'index($0, "## " v) == 1 {f = 1; next} /^## / {f = 0} f' CHANGELOG.md > notes.md
+          printf "\n**参考実装です。動作は保証しません。安全計装システム（SIS）など安全に関わる用途には使用できません。** ライセンスは MIT。\n" >> notes.md
+          gh release create "$GITHUB_REF_NAME" --title "${{ github.event.repository.name }} $v" --notes-file notes.md
